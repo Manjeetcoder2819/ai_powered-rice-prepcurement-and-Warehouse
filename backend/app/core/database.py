@@ -48,6 +48,10 @@ def sanitize_db_url(url: str) -> str:
             
     return f"{scheme}://{authority}{path}"
 
+import os
+
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+
 DB_URL = sanitize_db_url(settings.DATABASE_URL)
 
 if DB_URL.startswith("postgresql+psycopg2://"):
@@ -73,16 +77,23 @@ if "sqlite" not in DB_URL:
             raise ValueError("No host specified in database URL")
     except Exception as e:
         print(f"[Database] Warning: Remote host '{host}' is unreachable ({e}). Falling back to local SQLite.")
-        backend_dir = Path(__file__).resolve().parents[2]
-        DB_URL = f"sqlite+aiosqlite:///{backend_dir / 'rice_system.db'}"
+        if IS_VERCEL:
+            DB_URL = "sqlite+aiosqlite:////tmp/rice_system.db"
+        else:
+            backend_dir = Path(__file__).resolve().parents[2]
+            DB_URL = f"sqlite+aiosqlite:///{backend_dir / 'rice_system.db'}"
+
 if DB_URL.startswith("sqlite"):
-    backend_dir = Path(__file__).resolve().parents[2]
-    # Extract filename/relative path (e.g. ./rice_system.db or rice_system.db)
-    prefix = "sqlite+aiosqlite:///"
-    if DB_URL.startswith(prefix):
-        path_part = DB_URL[len(prefix):].lstrip(".").lstrip("/")
-        absolute_db_path = (backend_dir / path_part).resolve()
-        DB_URL = f"sqlite+aiosqlite:///{absolute_db_path}"
+    if IS_VERCEL:
+        DB_URL = "sqlite+aiosqlite:////tmp/rice_system.db"
+    else:
+        backend_dir = Path(__file__).resolve().parents[2]
+        # Extract filename/relative path (e.g. ./rice_system.db or rice_system.db)
+        prefix = "sqlite+aiosqlite:///"
+        if DB_URL.startswith(prefix):
+            path_part = DB_URL[len(prefix):].lstrip(".").lstrip("/")
+            absolute_db_path = (backend_dir / path_part).resolve()
+            DB_URL = f"sqlite+aiosqlite:///{absolute_db_path}"
 
 # =====================================================
 # DATABASE ENGINE
