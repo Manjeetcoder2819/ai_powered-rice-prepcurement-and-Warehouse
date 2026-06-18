@@ -51,6 +51,9 @@ async def get_farmers(db: AsyncSession = Depends(get_db)):
 
 @router.post("")
 async def create_farmer(data: FarmerCreate, db: AsyncSession = Depends(get_db)):
+    if data.bags <= 0:
+        raise HTTPException(status_code=400, detail="Bags count must be a positive integer (at least 1 bag)")
+    
     # Generate token
     result = await db.execute(select(FarmerModel))
     count  = len(result.scalars().all())

@@ -9,6 +9,7 @@ import {
   getFarmers,
   getVehicles,
   sendRainAlert,
+  predictFarmer,
 } from '@/lib/api'
 
 /* =========================================================
@@ -18,17 +19,24 @@ import {
 function DonutChart({ goodPct, wetPct, total }) {
   const gp = parseFloat(goodPct) || 0;
   const wp = parseFloat(wetPct) || 0;
+  const hasBags = total > 0;
+  
+  const totalPct = Math.min(100, gp + wp);
+  const gradient = hasBags
+    ? `conic-gradient(
+        #16a34a 0% ${gp}%,
+        #ea580c ${gp}% ${totalPct}%,
+        #dc2626 ${totalPct}% 100%
+      )`
+    : '#cbd5e1'; // neutral slate gray fallback
+
   return (
     <div
       style={{
         width: 150,
         height: 150,
         borderRadius: '50%',
-        background: `conic-gradient(
-          #16a34a 0% ${gp}%,
-          #ea580c ${gp}% ${gp + wp}%,
-          #dc2626 ${gp + wp}% 100%
-        )`,
+        background: gradient,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -49,7 +57,7 @@ function DonutChart({ goodPct, wetPct, total }) {
         }}
       >
         <div style={{ fontSize: 24, fontWeight: 800 }}>
-          {goodPct}%
+          {hasBags ? `${goodPct}%` : 'N/A'}
         </div>
 
         <div
@@ -58,7 +66,7 @@ function DonutChart({ goodPct, wetPct, total }) {
             color: '#6b7280',
           }}
         >
-          Good
+          {hasBags ? 'Good' : 'No Bags'}
         </div>
       </div>
     </div>
@@ -178,7 +186,8 @@ function QualityTrendChart({ batches = [] }) {
 ========================================================= */
 
 function MoistureGauge({ value = 13.5 }) {
-  const percentage = Math.max(8, Math.min(22, value));
+  const val = isNaN(value) ? 13.5 : value;
+  const percentage = Math.max(8, Math.min(22, val));
   const angle = -180 + ((percentage - 8) / 14) * 180;
   
   let color = '#16a34a';
@@ -221,29 +230,99 @@ function MoistureGauge({ value = 13.5 }) {
    AI INTERACTIVE OPTIMIZER SIMULATOR
 ========================================================= */
 
-function AISimulator() {
-  const [variety, setVariety] = useState('Sona Masoori');
-  const [bags, setBags] = useState(150);
-  
-  const defaultRates = {
-    'Sona Masoori': { d: 0.028, w: 0.012 },
-    'IR-64': { d: 0.035, w: 0.016 },
-    'Basmati': { d: 0.022, w: 0.010 }
-  };
-  
-  const rates = defaultRates[variety] || { d: 0.03, w: 0.012 };
-  const bagFactor = (bags - 80) / 400;
-  
-  const predDamagedRate = Math.max(0.005, Math.min(0.12, rates.d + bagFactor * 0.025));
-  const predWetRate = Math.max(0.0, Math.min(0.08, rates.w + bagFactor * 0.014));
-  
-  const expectedDamaged = Math.round(bags * predDamagedRate);
-  const expectedWet = Math.round(bags * predWetRate);
-  const expectedWait = Math.max(5, Math.round(12 + (bags * 0.08)));
-  const estDeduction = expectedDamaged * 140;
+function AISimulator({ queuePosition = 1 }) {
+  const [variety, setVariety] = useState('Sona Masoori')
+  const [bags, setBags] = useState(150)
+  const [predictions, setPredictions] = useState({
+    expectedWait: 24,
+    estDeduction: 1120,
+    expectedDamaged: 8,
+    expectedWet: 4,
+    predDamagedRate: 0.05,
+    predWetRate: 0.02,
+  })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const fetchPrediction = async () => {
+      setLoading(true)
+      try {
+        const res = await predictFarmer({
+          variety,
+          bags: Math.max(bags, 0),
+          queue_position: queuePosition,
+        })
+        if (active && res) {
+          setPredictions({
+            expectedWait: res.wait_minutes,
+            estDeduction: res.prediction.estimated_deduction,
+            expectedDamaged: res.prediction.expected_damaged,
+            expectedWet: res.prediction.expected_wet,
+            predDamagedRate: res.prediction.damaged_rate,
+            predWetRate: res.prediction.wet_rate,
+          })
+        }
+      } catch (err) {
+        console.error('Simulation forecast failed:', err)
+        // Fallback local calculations in case of API error
+        const defaultRates = {
+          'Sona Masoori': { d: 0.0523, w: 0.0233 },
+          'IR-64': { d: 0.0531, w: 0.0231 },
+          'Basmati': { d: 0.0532, w: 0.0231 },
+          'HMT': { d: 0.052, w: 0.023 },
+          'IR-36': { d: 0.053, w: 0.023 },
+          'Pusa Basmati': { d: 0.053, w: 0.023 },
+          'Swarna': { d: 0.052, w: 0.023 },
+          'PR 106': { d: 0.052, w: 0.023 }
+        }
+        const rates = defaultRates[variety] || { d: 0.053, w: 0.023 }
+        const bagFactor = (bags - 80) / 400
+        const predDamagedRate = Math.max(0.005, Math.min(0.12, rates.d + bagFactor * 0.025))
+        const predWetRate = Math.max(0.0, Math.min(0.08, rates.w + bagFactor * 0.014))
+        const expectedDamaged = Math.round(bags * predDamagedRate)
+        const expectedWet = Math.round(bags * predWetRate)
+        const expectedWait = Math.max(5, Math.round(12 + (bags * 0.08) + (queuePosition * 3)))
+        const estDeduction = expectedDamaged * 140
+
+        if (active) {
+          setPredictions({
+            expectedWait,
+            estDeduction,
+            expectedDamaged,
+            expectedWet,
+            predDamagedRate,
+            predWetRate,
+          })
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    const delayDebounce = setTimeout(fetchPrediction, 250)
+    return () => {
+      active = false
+      clearTimeout(delayDebounce)
+    }
+  }, [variety, bags, queuePosition])
+
+  const {
+    expectedWait,
+    estDeduction,
+    expectedDamaged,
+    expectedWet,
+    predDamagedRate,
+    predWetRate,
+  } = predictions
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: 14, padding: 18, border: '1px solid #e5e7eb', flex: 1 }}>
+    <div style={{ background: '#ffffff', borderRadius: 14, padding: 18, border: '1px solid #e5e7eb', flex: 1, position: 'relative' }}>
+      {loading && (
+        <div style={{ position: 'absolute', top: 12, right: 18, fontSize: 10, color: '#3b82f6', fontWeight: 700 }}>
+          Calculating Forecast...
+        </div>
+      )}
       <h3 style={{ margin: '0 0 4px 0', fontSize: 15, fontWeight: 700 }}>🔮 AI Procurement & Wait-Time Optimizer</h3>
       <p style={{ margin: '0 0 14px 0', fontSize: 12, color: '#6b7280' }}>
         Simulate registering a farmer cargo to forecast queue logistics and defect outcomes using the active ML regressions.
@@ -261,6 +340,11 @@ function AISimulator() {
               <option value="Sona Masoori">Sona Masoori</option>
               <option value="IR-64">IR-64</option>
               <option value="Basmati">Basmati</option>
+              <option value="HMT">HMT</option>
+              <option value="IR-36">IR-36</option>
+              <option value="Pusa Basmati">Pusa Basmati</option>
+              <option value="Swarna">Swarna</option>
+              <option value="PR 106">PR 106</option>
             </select>
           </div>
           
@@ -308,7 +392,7 @@ function AISimulator() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /* =========================================================
@@ -332,7 +416,7 @@ function AIAdvisoryCenter({ kpis, latestBatch }) {
     });
   }
   
-  if (latestBatch && latestBatch.wet > latestBatch.total_bags * 0.05) {
+  if (latestBatch && latestBatch.total_bags > 0 && latestBatch.wet > latestBatch.total_bags * 0.05) {
     alerts.push({
       type: 'warning',
       title: 'Moisture Spikes in Scanned Inflow',
@@ -423,6 +507,7 @@ export default function DashboardPage({ onNavigate }) {
   const [batches, setBatches] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
+  const [chartView, setChartView] = useState('latest')
 
   const load = useCallback(async () => {
     try {
@@ -477,28 +562,40 @@ export default function DashboardPage({ onNavigate }) {
     )
     .slice(0, 5)
 
+  // Calculate cumulative stats:
+  const cumulativeTotal = batches.length > 0 ? batches.reduce((acc, b) => acc + Math.max(0, b.total_bags), 0) : 2500
+  const cumulativeGood = batches.length > 0 ? batches.reduce((acc, b) => acc + Math.max(0, b.good), 0) : 2310
+  const cumulativeWet = batches.length > 0 ? batches.reduce((acc, b) => acc + Math.max(0, b.wet), 0) : 58
+  const cumulativeDmg = batches.length > 0 ? batches.reduce((acc, b) => acc + Math.max(0, b.damaged), 0) : 132
+
   const latestBatch = batches[0]
+  const latestTotal = latestBatch ? Math.max(0, latestBatch.total_bags) : 2500
+  const latestGood = latestBatch ? Math.max(0, latestBatch.good) : 2310
+  const latestWet = latestBatch ? Math.max(0, latestBatch.wet) : 58
+  const latestDmg = latestBatch ? Math.max(0, latestBatch.damaged) : 132
 
-  const goodPct = latestBatch
-    ? ((latestBatch.good / latestBatch.total_bags) * 100).toFixed(1)
-    : '96.2'
+  const isLatest = chartView === 'latest'
 
-  const wetPct = latestBatch
-    ? ((latestBatch.wet / latestBatch.total_bags) * 100).toFixed(1)
-    : '1.4'
+  const totalBags = isLatest ? latestTotal : cumulativeTotal
+  const goodBags = isLatest ? latestGood : cumulativeGood
+  const wetBags = isLatest ? latestWet : cumulativeWet
+  const dmgBags = isLatest ? latestDmg : cumulativeDmg
 
-  const damagedPct = latestBatch
-    ? ((latestBatch.damaged / latestBatch.total_bags) * 100).toFixed(1)
-    : '2.4'
+  const goodPct = totalBags > 0
+    ? ((goodBags / totalBags) * 100).toFixed(1)
+    : (latestBatch ? '0.0' : '92.4')
 
-  const totalBags = latestBatch ? latestBatch.total_bags : 2543
-  const goodBags = latestBatch ? latestBatch.good : 2446
-  const wetBags = latestBatch ? latestBatch.wet : 35
-  const dmgBags = latestBatch ? latestBatch.damaged : 62
+  const wetPct = totalBags > 0
+    ? ((wetBags / totalBags) * 100).toFixed(1)
+    : (latestBatch ? '0.0' : '2.3')
 
-  const avgMoisture = latestBatch
-    ? parseFloat((12.5 + (latestBatch.wet / latestBatch.total_bags) * 10.0).toFixed(1))
-    : 13.6
+  const damagedPct = totalBags > 0
+    ? ((dmgBags / totalBags) * 100).toFixed(1)
+    : (latestBatch ? '0.0' : '5.3')
+
+  const avgMoisture = totalBags > 0
+    ? parseFloat((12.5 + (wetBags / totalBags) * 10.0).toFixed(1))
+    : 12.7
 
   return (
     <div style={pageStyle}>
@@ -640,9 +737,47 @@ export default function DashboardPage({ onNavigate }) {
         ========================================================= */}
 
         <div style={cardStyle}>
-          <div style={headerStyle}>
-            <div style={titleStyle}>
-              Gunny Bag AI Detection
+          <div style={{ ...headerStyle, gap: 10, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={titleStyle}>
+                Gunny Bag AI Detection
+              </div>
+              <div style={{ display: 'flex', background: '#f1f5f9', padding: 2, borderRadius: 6, border: '1px solid #e2e8f0', alignSelf: 'flex-start' }}>
+                <button 
+                  onClick={() => setChartView('latest')} 
+                  style={{
+                    border: 'none',
+                    background: chartView === 'latest' ? '#ffffff' : 'transparent',
+                    color: chartView === 'latest' ? '#1f2937' : '#6b7280',
+                    padding: '3px 8px',
+                    borderRadius: 4,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: chartView === 'latest' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  Latest Scan
+                </button>
+                <button 
+                  onClick={() => setChartView('cumulative')} 
+                  style={{
+                    border: 'none',
+                    background: chartView === 'cumulative' ? '#ffffff' : 'transparent',
+                    color: chartView === 'cumulative' ? '#1f2937' : '#6b7280',
+                    padding: '3px 8px',
+                    borderRadius: 4,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: chartView === 'cumulative' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  Cumulative
+                </button>
+              </div>
             </div>
 
             <button onClick={() => onNavigate?.('bags')} style={linkBtn}>
@@ -664,7 +799,7 @@ export default function DashboardPage({ onNavigate }) {
 
             <div style={{ flex: 1 }}>
               <div style={smallLabel}>
-                Total Bags Scanned (Latest Batch)
+                {chartView === 'latest' ? 'Total Bags Scanned (Latest Scan)' : 'Total Bags Scanned (Cumulative)'}
               </div>
 
               <div style={bigNumber}>
@@ -929,7 +1064,7 @@ export default function DashboardPage({ onNavigate }) {
           INTERACTIVE SIMULATION SECTION (NEW!)
       ========================================================= */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
-        <AISimulator />
+        <AISimulator queuePosition={queueFarmers.length + 1} />
         
         <div style={{ background: '#ffffff', borderRadius: 14, padding: 18, border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginBottom: 4 }}>📈 MODEL ACCURACY RATING</div>

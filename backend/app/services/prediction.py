@@ -21,9 +21,9 @@ DATASET_DIR = Path(__file__).resolve().parents[2] / "datasets"
 QUALITY_DATASET = DATASET_DIR / "rice_quality_training.csv"
 
 DEFAULT_VARIETY_RISK = {
-    "Sona Masoori": {"damaged_rate": 0.028, "wet_rate": 0.012},
-    "IR-64": {"damaged_rate": 0.035, "wet_rate": 0.016},
-    "Basmati": {"damaged_rate": 0.022, "wet_rate": 0.010},
+    "Sona Masoori": {"damaged_rate": 0.0523, "wet_rate": 0.0233},
+    "IR-64": {"damaged_rate": 0.0531, "wet_rate": 0.0231},
+    "Basmati": {"damaged_rate": 0.0532, "wet_rate": 0.0231},
 }
 
 
@@ -126,7 +126,7 @@ def train_quality_profile(
 
     fallback = DEFAULT_VARIETY_RISK.get(
         variety,
-        {"damaged_rate": 0.03, "wet_rate": 0.012},
+        {"damaged_rate": 0.053, "wet_rate": 0.023},
     )
     sample_count = len(damaged_rates)
 
