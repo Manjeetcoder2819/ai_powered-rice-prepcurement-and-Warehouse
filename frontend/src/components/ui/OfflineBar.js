@@ -42,6 +42,7 @@ export default function OfflineBar() {
         </span>
 
         <button
+          suppressHydrationWarning={true}
           onClick={handleCheckUpdates}
           style={updateButton}
         >

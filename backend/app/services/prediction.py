@@ -170,7 +170,7 @@ async def training_summary(db: AsyncSession) -> dict:
     price_result = await db.execute(select(VarietyPriceModel))
     price_records = price_result.scalars().all()
     prices = [
-        {"variety": item.variety, "price_per_mt": item.price_per_mt}
+        {"variety": item.variety, "price_per_kg": item.price_per_kg}
         for item in price_records
     ]
 
@@ -189,11 +189,11 @@ async def price_summary(db: AsyncSession) -> dict:
     prices = result.scalars().all()
     return {
         "prices": [
-            {"variety": item.variety, "price_per_mt": item.price_per_mt}
+            {"variety": item.variety, "price_per_kg": item.price_per_kg}
             for item in prices
         ],
-        "average_price_per_mt": round(
-            sum(item.price_per_mt for item in prices) / len(prices), 2
+        "average_price_per_kg": round(
+            sum(item.price_per_kg for item in prices) / len(prices), 2
         ) if prices else 0.0,
         "price_count": len(prices),
     }

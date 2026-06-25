@@ -1,52 +1,88 @@
-const VARIETIES = [
-  { name: 'Pusa Basmati', pct: 45, mt: 560,  color: '#2e7d45' },
-  { name: 'Swarna',       pct: 30, mt: 374,  color: '#1976d2' },
-  { name: 'PR 106',       pct: 15, mt: 187,  color: '#f5a623' },
-  { name: 'Other',        pct: 10, mt: 125,  color: '#9e9e9e' },
-]
+"use client";
 
-export default function StockPieChart() {
-  const r = 44, cx = 60, cy = 60
-  const circ = 2 * Math.PI * r
-  const slices = VARIETIES.reduce(
-    (acc, v) => {
-      const dash = (v.pct / 100) * circ
-      return {
-        offset: acc.offset + dash,
-        items: [
-          ...acc.items,
-          {
-            ...v,
-            dash,
-            offset: acc.offset,
-          },
-        ],
+import React from "react";
+
+export default function StockPieChart({ stock = [], width = 150, height = 150, strokeWidth = 16 }) {
+  const total = stock.reduce((sum, item) => sum + (item.qty_kg || 0), 0);
+  const cx = width / 2;
+  const cy = height / 2;
+  // Radius of the circle containing the donut strokes
+  const r = (width - strokeWidth) / 2 - 2; 
+  const circ = 2 * Math.PI * r;
+  
+  let currentOffset = -circ * 0.25; // start from top (-90 degrees)
+  const slices = [];
+
+  if (total > 0) {
+    stock.forEach(item => {
+      const qty = item.qty_kg || 0;
+      const pct = qty / total;
+      if (pct > 0) {
+        const dash = pct * circ;
+        slices.push({
+          variety: item.variety,
+          color: item.color || "#cbd5e1",
+          dash: dash,
+          offset: currentOffset,
+        });
+        currentOffset -= dash;
       }
-    },
-    { offset: -circ * 0.25, items: [] },
-  ).items
+    });
+  }
+
+  const transitionStyle = {
+    transition: "stroke-dasharray 0.6s cubic-bezier(0.4, 0, 0.2, 1), stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+  };
 
   return (
-    <div style={{ flexShrink: 0 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>Stock by Variety</div>
-      <svg width="120" height="120" viewBox="0 0 120 120">
-        {slices.map(v => (
-          <circle key={v.name} cx={cx} cy={cy} r={r} fill="none"
-            stroke={v.color} strokeWidth="22"
-            strokeDasharray={`${v.dash - 2} ${circ - v.dash + 2}`}
-            strokeDashoffset={-v.offset} />
+    <div style={{ position: "relative", width, height, flexShrink: 0 }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        {/* Gray background track if empty */}
+        {total === 0 && (
+          <circle 
+            cx={cx} 
+            cy={cy} 
+            r={r} 
+            fill="none" 
+            stroke="#e5e7eb" 
+            strokeWidth={strokeWidth} 
+          />
+        )}
+        
+        {slices.map((slice, idx) => (
+          <circle
+            key={slice.variety + idx}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={slice.color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${slice.dash} ${circ - slice.dash}`}
+            strokeDashoffset={slice.offset}
+            style={transitionStyle}
+            strokeLinecap="round"
+          />
         ))}
-        <circle cx={cx} cy={cy} r={28} fill="white" />
       </svg>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
-        {VARIETIES.map(v => (
-          <div key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
-            <div style={{ width: 10, height: 10, borderRadius: 3, background: v.color, flexShrink: 0 }} />
-            <span style={{ color: 'var(--text-2)', flex: 1 }}>{v.name}</span>
-            <strong style={{ fontSize: 10 }}>{v.pct}% ({v.mt} MT)</strong>
-          </div>
-        ))}
+      
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>
+          {total > 0 ? "Stock" : "Empty"}
+        </div>
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 1, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          by Variety
+        </div>
       </div>
     </div>
-  )
+  );
 }

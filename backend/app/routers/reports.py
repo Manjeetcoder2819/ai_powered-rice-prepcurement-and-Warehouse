@@ -42,12 +42,12 @@ async def download_daily(db: AsyncSession = Depends(get_db)):
 async def download_warehouse(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(StockModel))
     stock  = result.scalars().all()
-    rows   = [[s.variety, s.qty_mt, s.capacity_mt, s.zone,
-               round(s.qty_mt / s.capacity_mt * 100, 1) if s.capacity_mt else 0]
+    rows   = [[s.variety, s.qty_kg, s.capacity_kg, s.zone,
+               round(s.qty_kg / s.capacity_kg * 100, 1) if s.capacity_kg else 0]
               for s in stock]
     return csv_response(
         rows,
-        ["Variety","Qty(MT)","Capacity(MT)","Zone","Utilisation(%)"],
+        ["Variety","Qty(Kg)","Capacity(Kg)","Zone","Utilisation(%)"],
         f"warehouse_report_{datetime.now().strftime('%Y%m%d')}.csv"
     )
 

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { addStockEntry, getLedger, getStock, getZones } from "@/lib/api";
+import { addStockEntry, getLedger, getStock, getZones, deleteStockEntry } from "@/lib/api";
+import StockPieChart from "@/components/dashboard/StockPieChart";
 
 const DEFAULT_STOCK_FORM = {
   variety: "",
-  qty_mt: "",
+  qty_kg: "",
   zone: "A",
   type: "Inflow",
   operator: "",
@@ -32,6 +33,16 @@ const VARIETIES = [
 ========================================================= */
 
 export default function WarehousePage() {
+  const formatCompact = (val) => {
+    if (val >= 1000000) {
+      return (val / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    }
+    if (val >= 1000) {
+      return (val / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+    }
+    return val.toLocaleString();
+  };
+
   const [stock, setStock] = useState([]);
 
   const [zones, setZones] = useState([]);
@@ -62,25 +73,25 @@ export default function WarehousePage() {
 
   const L = ledger.length ? ledger : DEMO_LEDGER;
 
-  const totalQty = S.reduce((a, s) => a + s.qty_mt, 0);
+  const totalQty = S.reduce((a, s) => a + (s.qty_kg || s.qty_mt || 0), 0);
 
-  const totalCap = S.reduce((a, s) => a + s.capacity_mt, 0);
+  const totalCap = S.reduce((a, s) => a + (s.capacity_kg || s.capacity_mt || 0), 0);
 
   const usedPct = totalCap > 0 ? Math.round((totalQty / totalCap) * 100) : 0;
 
-  const previewQty = parseFloat(form.qty_mt) || 0;
+  const previewQty = parseFloat(form.qty_kg || form.qty_mt || "") || 0;
   const selectedStock = S.find((item) => item.variety === form.variety);
-  const varietyPrice = selectedStock ? selectedStock.price_per_mt : 0;
+  const varietyPrice = selectedStock ? (selectedStock.price_per_kg || selectedStock.price_per_mt || 0) : 0;
   const estimatedValue = varietyPrice * previewQty;
   const projectedQty =
     selectedStock && form.type === "Outflow"
-      ? Math.max(0, selectedStock.qty_mt - previewQty)
+      ? Math.max(0, (selectedStock.qty_kg || selectedStock.qty_mt || 0) - previewQty)
       : selectedStock
-        ? selectedStock.qty_mt + previewQty
+        ? (selectedStock.qty_kg || selectedStock.qty_mt || 0) + previewQty
         : previewQty;
   const projectedPct =
-    selectedStock && selectedStock.capacity_mt > 0
-      ? Math.round((projectedQty / selectedStock.capacity_mt) * 100)
+    selectedStock && (selectedStock.capacity_kg || selectedStock.capacity_mt || 0) > 0
+      ? Math.round((projectedQty / (selectedStock.capacity_kg || selectedStock.capacity_mt || 0)) * 100)
       : 0;
 
   const closeAddModal = () => {
@@ -93,7 +104,7 @@ export default function WarehousePage() {
   ========================================================= */
 
   const handleAdd = async () => {
-    if (!form.variety || !form.qty_mt) {
+    if (!form.variety || !(form.qty_kg || form.qty_mt)) {
       toast.error("Fill all fields");
 
       return;
@@ -102,16 +113,53 @@ export default function WarehousePage() {
     try {
       const entry = await addStockEntry({
         ...form,
-        qty_mt: parseFloat(form.qty_mt),
+        qty_kg: parseFloat(form.qty_kg || form.qty_mt || ""),
       });
 
       setLedger((prev) => [entry, ...prev]);
+
+      // Re-fetch stock and zones to dynamically update KPIs and chart meters
+      try {
+        const [updatedStock, updatedZones] = await Promise.all([
+          getStock(),
+          getZones(),
+        ]);
+        setStock(updatedStock);
+        setZones(updatedZones);
+      } catch (fetchErr) {
+        console.error("Failed to refresh stock lists:", fetchErr);
+      }
 
       closeAddModal();
 
       toast.success("Stock entry added");
     } catch {
       toast.error("Failed to add entry");
+    }
+  };
+
+  const handleDelete = async (entryId) => {
+    if (!confirm("Are you sure you want to delete this stock ledger entry? This will revert the stock amount.")) {
+      return;
+    }
+
+    try {
+      await deleteStockEntry(entryId);
+
+      // Remove deleted entry from ledger state
+      setLedger((prev) => prev.filter((item) => item.id !== entryId));
+
+      // Re-fetch stock and zones to dynamically update KPIs and chart meters
+      const [updatedStock, updatedZones] = await Promise.all([
+        getStock(),
+        getZones(),
+      ]);
+      setStock(updatedStock);
+      setZones(updatedZones);
+
+      toast.success("Stock entry deleted and stock reverted");
+    } catch {
+      toast.error("Failed to delete stock entry");
     }
   };
 
@@ -131,19 +179,19 @@ export default function WarehousePage() {
         {[
           {
             label: "Total Capacity",
-            value: `${totalCap.toLocaleString()} MT`,
+            value: `${totalCap.toLocaleString()} Kg`,
             color: "#111827",
           },
 
           {
             label: "Current Stock",
-            value: `${totalQty.toLocaleString()} MT`,
+            value: `${totalQty.toLocaleString()} Kg`,
             color: "#16a34a",
           },
 
           {
             label: "Available",
-            value: `${(totalCap - totalQty).toLocaleString()} MT`,
+            value: `${(totalCap - totalQty).toLocaleString()} Kg`,
             color: "#2563eb",
           },
 
@@ -198,8 +246,13 @@ export default function WarehousePage() {
               stroke="#16a34a"
               strokeWidth="12"
               strokeDasharray={`${(usedPct / 100) * 314} 314`}
-              strokeDashoffset="-78.5"
+              strokeDashoffset="0"
               strokeLinecap="round"
+              style={{
+                transform: "rotate(-90deg)",
+                transformOrigin: "65px 65px",
+                transition: "stroke-dasharray 0.6s cubic-bezier(0.4, 0, 0.2, 1)"
+              }}
             />
 
             <text
@@ -214,7 +267,7 @@ export default function WarehousePage() {
             </text>
 
             <text x="65" y="76" textAnchor="middle" fontSize="9" fill="#9ca3af">
-              {totalQty}/{totalCap} MT
+              {formatCompact(totalQty)}/{formatCompact(totalCap)} Kg
             </text>
           </svg>
 
@@ -284,45 +337,49 @@ export default function WarehousePage() {
         {/* STOCK */}
 
         <div style={cardStyle}>
-          <div style={cardTitle}>Stock by Variety (MT)</div>
+          <div style={cardTitle}>Stock by Variety (Kg)</div>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-            }}
-          >
-            {S.map((item) => (
-              <div key={item.variety}>
-                <div style={stockRow}>
-                  <span style={stockName}>{item.variety}</span>
+          <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
+            >
+              {S.map((item) => (
+                <div key={item.variety}>
+                  <div style={stockRow}>
+                    <span style={stockName}>{item.variety}</span>
 
-                  <span style={stockQty}>
-                    {item.qty_mt} / {item.capacity_mt} MT
-                  </span>
+                    <span style={stockQty}>
+                      {(item.qty_kg ?? item.qty_mt)?.toLocaleString()} / {(item.capacity_kg ?? item.capacity_mt)?.toLocaleString()} Kg
+                    </span>
+                  </div>
+
+                  <div style={stockInfoRow}>
+                    <span>
+                      Price: ₹ {(item.price_per_kg ?? item.price_per_mt)?.toLocaleString() || "0"} / Kg
+                    </span>
+                    <span>
+                      Value: ₹ {item.stock_value?.toLocaleString() || "0"}
+                    </span>
+                  </div>
+
+                  <div style={progressBar}>
+                    <div
+                      style={{
+                        ...progressFill,
+                        width: `${((item.qty_kg ?? item.qty_mt ?? 0) / (item.capacity_kg ?? item.capacity_mt ?? 1)) * 100}%`,
+                        background: item.color,
+                      }}
+                    />
+                  </div>
                 </div>
-
-                <div style={stockInfoRow}>
-                  <span>
-                    Price: ₹ {item.price_per_mt?.toLocaleString() || "0"} / MT
-                  </span>
-                  <span>
-                    Value: ₹ {item.stock_value?.toLocaleString() || "0"}
-                  </span>
-                </div>
-
-                <div style={progressBar}>
-                  <div
-                    style={{
-                      ...progressFill,
-                      width: `${(item.qty_mt / item.capacity_mt) * 100}%`,
-                      background: item.color,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <StockPieChart stock={S} />
           </div>
         </div>
 
@@ -359,6 +416,7 @@ export default function WarehousePage() {
                   <th>Operator</th>
                   <th>Price</th>
                   <th>Est. Value</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
 
@@ -369,7 +427,7 @@ export default function WarehousePage() {
 
                     <td>{entry.variety}</td>
 
-                    <td style={boldText}>{entry.qty_mt}</td>
+                    <td style={boldText}>{(entry.qty_kg ?? entry.qty_mt)?.toLocaleString()}</td>
 
                     <td>Zone {entry.zone}</td>
 
@@ -389,8 +447,16 @@ export default function WarehousePage() {
                     </td>
 
                     <td>{entry.operator}</td>
-                    <td>₹ {entry.price_per_mt?.toLocaleString() || "0"}</td>
+                    <td>₹ {(entry.price_per_kg ?? entry.price_per_mt)?.toLocaleString() || "0"}</td>
                     <td>₹ {entry.estimated_value?.toLocaleString() || "0"}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        onClick={() => handleDelete(entry.id)}
+                        style={deleteBtn}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -434,15 +500,15 @@ export default function WarehousePage() {
             {/* QTY */}
 
             <div style={fieldBox}>
-              <label style={labelStyle}>Qty (MT)</label>
+              <label style={labelStyle}>Qty (Kg)</label>
 
               <input
                 type="number"
-                value={form.qty_mt}
+                value={form.qty_kg || form.qty_mt || ""}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    qty_mt: e.target.value,
+                    qty_kg: e.target.value,
                   })
                 }
                 style={inputStyle}
@@ -511,7 +577,7 @@ export default function WarehousePage() {
               <div style={stockPreviewCard}>
                 <div style={stockPreviewTitle}>Financial & Stock Preview</div>
                 <div style={stockPreviewRow}>
-                  <span>Price per MT:</span>
+                  <span>Price per Kg:</span>
                   <strong>₹ {varietyPrice.toLocaleString()}</strong>
                 </div>
                 <div style={stockPreviewRow}>
@@ -522,7 +588,7 @@ export default function WarehousePage() {
                   <>
                     <div style={stockPreviewRow}>
                       <span>Projected Qty:</span>
-                      <strong>{projectedQty.toLocaleString()} MT</strong>
+                      <strong>{projectedQty.toLocaleString()} Kg</strong>
                     </div>
                     <div style={stockPreviewRow}>
                       <span>Projected Capacity:</span>
@@ -660,6 +726,7 @@ const progressBar = {
 
 const progressFill = {
   height: "100%",
+  transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
 };
 
 const zoneBadge = {
@@ -715,6 +782,18 @@ const addBtn = {
   cursor: "pointer",
   fontWeight: 700,
   fontSize: 12,
+};
+
+const deleteBtn = {
+  padding: "4px 8px",
+  background: "#fee2e2",
+  color: "#dc2626",
+  border: "none",
+  borderRadius: 6,
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 11,
+  transition: "background 0.2s",
 };
 
 const tableStyle = {
@@ -833,46 +912,46 @@ const stockPreviewRow = {
 const DEMO_STOCK = [
   {
     variety: "Sona Masoori",
-    qty_mt: 2200,
-    capacity_mt: 2500,
+    qty_kg: 2200000,
+    capacity_kg: 2500000,
     zone: "A",
     color: "#2e7d45",
-    price_per_mt: 33000,
+    price_per_kg: 33.0,
     stock_value: 72600000,
   },
 
   {
     variety: "IR-64",
-    qty_mt: 1800,
-    capacity_mt: 2500,
+    qty_kg: 1800000,
+    capacity_kg: 2500000,
     zone: "B",
     color: "#1976d2",
-    price_per_mt: 28500,
+    price_per_kg: 28.5,
     stock_value: 51300000,
   },
 
   {
     variety: "Basmati",
-    qty_mt: 1500,
-    capacity_mt: 2500,
+    qty_kg: 1500000,
+    capacity_kg: 2500000,
     zone: "B",
     color: "#f5a623",
-    price_per_mt: 39000,
+    price_per_kg: 39.0,
     stock_value: 58500000,
   },
 
   {
     variety: "HMT",
-    qty_mt: 450,
-    capacity_mt: 1000,
+    qty_kg: 450000,
+    capacity_kg: 1000000,
     zone: "C",
     color: "#0f6e56",
   },
 
   {
     variety: "IR-36",
-    qty_mt: 200,
-    capacity_mt: 1000,
+    qty_kg: 200000,
+    capacity_kg: 1000000,
     zone: "C",
     color: "#993c1d",
   },
@@ -925,7 +1004,7 @@ const DEMO_LEDGER = [
     id: 1,
     time: "07:30",
     variety: "Sona Masoori",
-    qty_mt: 5.4,
+    qty_kg: 5400,
     zone: "A",
     type: "Inflow",
     operator: "Bhosale R.",
@@ -935,7 +1014,7 @@ const DEMO_LEDGER = [
     id: 2,
     time: "08:10",
     variety: "IR-64",
-    qty_mt: 3.83,
+    qty_kg: 3830,
     zone: "B",
     type: "Inflow",
     operator: "Kadam S.",
@@ -945,7 +1024,7 @@ const DEMO_LEDGER = [
     id: 3,
     time: "08:45",
     variety: "Basmati",
-    qty_mt: 9.0,
+    qty_kg: 9000,
     zone: "B",
     type: "Inflow",
     operator: "Patil A.",
@@ -955,7 +1034,7 @@ const DEMO_LEDGER = [
     id: 4,
     time: "09:00",
     variety: "Sona Masoori",
-    qty_mt: 8.5,
+    qty_kg: 8500,
     zone: "A",
     type: "Outflow",
     operator: "Mane D.",
@@ -965,7 +1044,7 @@ const DEMO_LEDGER = [
     id: 5,
     time: "09:30",
     variety: "HMT",
-    qty_mt: 2.25,
+    qty_kg: 2250,
     zone: "C",
     type: "Inflow",
     operator: "Shinde V.",

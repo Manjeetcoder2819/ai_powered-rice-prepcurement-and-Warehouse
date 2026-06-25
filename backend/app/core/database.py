@@ -194,14 +194,14 @@ async def seed_database():
 
             print("Seeding missing variety prices...")
             prices_data = [
-                VarietyPriceModel(variety='Sona Masoori', price_per_mt=33000.0),
-                VarietyPriceModel(variety='IR-64', price_per_mt=28500.0),
-                VarietyPriceModel(variety='Basmati', price_per_mt=39000.0),
-                VarietyPriceModel(variety='HMT', price_per_mt=26000.0),
-                VarietyPriceModel(variety='IR-36', price_per_mt=25000.0),
-                VarietyPriceModel(variety='Pusa Basmati', price_per_mt=42000.0),
-                VarietyPriceModel(variety='Swarna', price_per_mt=24000.0),
-                VarietyPriceModel(variety='PR 106', price_per_mt=25500.0),
+                VarietyPriceModel(variety='Sona Masoori', price_per_kg=33.0),
+                VarietyPriceModel(variety='IR-64', price_per_kg=28.5),
+                VarietyPriceModel(variety='Basmati', price_per_kg=39.0),
+                VarietyPriceModel(variety='HMT', price_per_kg=26.0),
+                VarietyPriceModel(variety='IR-36', price_per_kg=25.0),
+                VarietyPriceModel(variety='Pusa Basmati', price_per_kg=42.0),
+                VarietyPriceModel(variety='Swarna', price_per_kg=24.0),
+                VarietyPriceModel(variety='PR 106', price_per_kg=25.5),
             ]
             db.add_all(prices_data)
             await db.commit()
@@ -304,22 +304,22 @@ async def seed_database():
         stock_data = [
             StockModel(
                 variety="Sona Masoori",
-                qty_mt=2200.0,
-                capacity_mt=2500.0,
+                qty_kg=2200000.0,
+                capacity_kg=2500000.0,
                 zone="A",
                 color="#2e7d45",
             ),
             StockModel(
                 variety="IR-64",
-                qty_mt=1800.0,
-                capacity_mt=2500.0,
+                qty_kg=1800000.0,
+                capacity_kg=2500000.0,
                 zone="B",
                 color="#1976d2",
             ),
             StockModel(
                 variety="Basmati",
-                qty_mt=1500.0,
-                capacity_mt=2500.0,
+                qty_kg=1500000.0,
+                capacity_kg=2500000.0,
                 zone="B",
                 color="#f5a623",
             ),
@@ -392,7 +392,7 @@ async def seed_database():
             LedgerModel(
                 time="09:30",
                 variety="Sona Masoori",
-                qty_mt=42.5,
+                qty_kg=42500.0,
                 zone="A",
                 type="Inflow",
                 operator="System",
@@ -400,7 +400,7 @@ async def seed_database():
             LedgerModel(
                 time="10:00",
                 variety="IR-64",
-                qty_mt=18.0,
+                qty_kg=18000.0,
                 zone="B",
                 type="Outflow",
                 operator="Warehouse Manager",
@@ -408,7 +408,7 @@ async def seed_database():
             LedgerModel(
                 time="10:15",
                 variety="Basmati",
-                qty_mt=25.0,
+                qty_kg=25000.0,
                 zone="C",
                 type="Inflow",
                 operator="System",
@@ -491,14 +491,14 @@ async def seed_database():
 
         # Seed Variety Price data
         prices_data = [
-            VarietyPriceModel(variety='Sona Masoori', price_per_mt=33000.0),
-            VarietyPriceModel(variety='IR-64', price_per_mt=28500.0),
-            VarietyPriceModel(variety='Basmati', price_per_mt=39000.0),
-            VarietyPriceModel(variety='HMT', price_per_mt=26000.0),
-            VarietyPriceModel(variety='IR-36', price_per_mt=25000.0),
-            VarietyPriceModel(variety='Pusa Basmati', price_per_mt=42000.0),
-            VarietyPriceModel(variety='Swarna', price_per_mt=24000.0),
-            VarietyPriceModel(variety='PR 106', price_per_mt=25500.0),
+            VarietyPriceModel(variety='Sona Masoori', price_per_kg=33.0),
+            VarietyPriceModel(variety='IR-64', price_per_kg=28.5),
+            VarietyPriceModel(variety='Basmati', price_per_kg=39.0),
+            VarietyPriceModel(variety='HMT', price_per_kg=26.0),
+            VarietyPriceModel(variety='IR-36', price_per_kg=25.0),
+            VarietyPriceModel(variety='Pusa Basmati', price_per_kg=42.0),
+            VarietyPriceModel(variety='Swarna', price_per_kg=24.0),
+            VarietyPriceModel(variety='PR 106', price_per_kg=25.5),
         ]
         db.add_all(prices_data)
 

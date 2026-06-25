@@ -65,8 +65,8 @@ export default function ProcurementPage() {
     }
   };
 
-  // Convert good bags to Metric Tons (1 bag = 50kg = 0.05 MT)
-  const getWeightMT = (goodBags) => (goodBags * 0.05).toFixed(2);
+  // Convert good bags to Kilograms (1 bag = 50kg)
+  const getWeightKg = (goodBags) => (goodBags * 50).toFixed(0);
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
@@ -147,7 +147,7 @@ export default function ProcurementPage() {
 
               <div style={fieldGroup}>
                 <label style={label}>Net Weight (Good Rice)</label>
-                <div style={{ fontWeight: 600 }}>{getWeightMT(selectedItem.total_bags - selectedItem.damaged - selectedItem.wet)} MT</div>
+                <div style={{ fontWeight: 600 }}>{getWeightKg(selectedItem.total_bags - selectedItem.damaged - selectedItem.wet)} Kg</div>
               </div>
 
               <div style={fieldGroup}>

@@ -17,28 +17,28 @@ async def get_kpis(db: AsyncSession = Depends(get_db)):
     done_q    = await db.execute(select(func.count()).where(FarmerModel.status == "done"))
     bags_q    = await db.execute(select(func.sum(BatchModel.total_bags)))
     dmg_q     = await db.execute(select(func.sum(BatchModel.damaged)))
-    stock_q   = await db.execute(select(func.sum(StockModel.qty_mt)))
-    cap_q     = await db.execute(select(func.sum(StockModel.capacity_mt)))
+    stock_q   = await db.execute(select(func.sum(StockModel.qty_kg)))
+    cap_q     = await db.execute(select(func.sum(StockModel.capacity_kg)))
     sms_q     = await db.execute(select(func.count(SMSLogModel.id)))
 
     in_queue  = farmers_q.scalar() or 24
     total_bags= int(bags_q.scalar() or 2543)
     damaged   = int(dmg_q.scalar() or 37)
-    stock     = float(stock_q.scalar() or 1245.80)
-    capacity  = float(cap_q.scalar() or 2000.0)
+    stock     = float(stock_q.scalar() or 1245800.0)
+    capacity  = float(cap_q.scalar() or 2000000.0)
     pct       = round((stock / capacity * 100) if capacity > 0 else 0)
 
     return {
         "farmers_in_queue":      in_queue,
         "farmers_delta":         -8,
-        "rice_procured_mt":      128.45,
+        "rice_procured_kg":      128450.0,
         "rice_delta_pct":        12.5,
         "bags_counted":          total_bags,
         "bags_today":            156,
         "damaged_bags":          damaged,
         "damaged_pct":           round(damaged / total_bags * 100, 2) if total_bags > 0 else 1.45,
-        "warehouse_stock_mt":    stock,
-        "warehouse_capacity_mt": capacity,
+        "warehouse_stock_kg":    stock,
+        "warehouse_capacity_kg": capacity,
         "warehouse_pct":         pct,
         "alerts_today":          12,
     }

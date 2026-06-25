@@ -138,8 +138,8 @@ async def update_batch_status(batch_id: str, data: BatchStatusUpdate, db: AsyncS
     
     # If the status changes to Approved, integrate with Warehouse:
     if new_status == "Approved" and old_status != "Approved":
-        # 1 bag = 50kg = 0.05 Metric Tons
-        qty_mt = batch.good * 0.05
+        # 1 bag = 50kg
+        qty_kg = batch.good * 50.0
         
         # Add Ledger inflow
         from app.models.warehouse import LedgerModel, StockModel
@@ -153,7 +153,7 @@ async def update_batch_status(batch_id: str, data: BatchStatusUpdate, db: AsyncS
         ledger_entry = LedgerModel(
             time=now_time,
             variety=batch.variety or "Sona Masoori",
-            qty_mt=qty_mt,
+            qty_kg=qty_kg,
             zone=target_zone,
             type="Inflow",
             operator="AI System (Procurement)"
@@ -162,7 +162,7 @@ async def update_batch_status(batch_id: str, data: BatchStatusUpdate, db: AsyncS
         
         # Update stock for variety
         if stock:
-            stock.qty_mt = round(stock.qty_mt + qty_mt, 2)
+            stock.qty_kg = round(stock.qty_kg + qty_kg, 2)
             
     await db.commit()
     await db.refresh(batch)

@@ -13,7 +13,7 @@ import {
 
 const INITIAL_SETTINGS = {
   warehouseName: "Pimpri APMC",
-  capacityMt: 2500,
+  capacityKg: 2500000,
   smsSender: "APMC",
   environment: "development",
 };
@@ -155,6 +155,7 @@ export default function SettingsPage() {
           <div style={fieldGroup}>
             <label style={label}>Warehouse Name</label>
             <input
+              suppressHydrationWarning={true}
               value={form.warehouseName}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -167,14 +168,15 @@ export default function SettingsPage() {
           </div>
 
           <div style={fieldGroup}>
-            <label style={label}>Capacity (MT)</label>
+            <label style={label}>Capacity (Kg)</label>
             <input
+              suppressHydrationWarning={true}
               type="number"
-              value={form.capacityMt}
+              value={form.capacityKg || form.capacityMt || ""}
               onChange={(event) =>
                 setForm((prev) => ({
                   ...prev,
-                  capacityMt: Number(event.target.value),
+                  capacityKg: Number(event.target.value),
                 }))
               }
               style={inputStyle}
@@ -184,6 +186,7 @@ export default function SettingsPage() {
           <div style={fieldGroup}>
             <label style={label}>SMS Sender ID</label>
             <input
+              suppressHydrationWarning={true}
               value={form.smsSender}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -198,6 +201,7 @@ export default function SettingsPage() {
           <div style={fieldGroup}>
             <label style={label}>Environment</label>
             <select
+              suppressHydrationWarning={true}
               value={form.environment}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -220,7 +224,7 @@ export default function SettingsPage() {
         <div style={summaryCard}>
           <div style={summaryTitle}>Current Values</div>
           <div>Warehouse: {settings.warehouseName}</div>
-          <div>Capacity: {settings.capacityMt} MT</div>
+          <div>Capacity: {(settings.capacityKg ?? settings.capacityMt)?.toLocaleString()} Kg</div>
           <div>SMS Sender: {settings.smsSender}</div>
           <div>Environment: {settings.environment}</div>
         </div>
@@ -318,6 +322,7 @@ export default function SettingsPage() {
                 <div style={fieldGroup}>
                   <label style={label}>Rice Variety</label>
                   <select
+                    suppressHydrationWarning={true}
                     value={manualRecord.variety}
                     onChange={(e) => setManualRecord(prev => ({ ...prev, variety: e.target.value }))}
                     style={selectStyle}
@@ -330,6 +335,7 @@ export default function SettingsPage() {
                 <div style={fieldGroup}>
                   <label style={label}>Total Bags</label>
                   <input
+                    suppressHydrationWarning={true}
                     type="number"
                     value={manualRecord.totalBags}
                     onChange={(e) => setManualRecord(prev => ({ ...prev, totalBags: Number(e.target.value) }))}
@@ -341,6 +347,7 @@ export default function SettingsPage() {
                 <div style={fieldGroup}>
                   <label style={label}>Damaged Bags</label>
                   <input
+                    suppressHydrationWarning={true}
                     type="number"
                     value={manualRecord.damaged}
                     onChange={(e) => setManualRecord(prev => ({ ...prev, damaged: Number(e.target.value) }))}
@@ -350,6 +357,7 @@ export default function SettingsPage() {
                 <div style={fieldGroup}>
                   <label style={label}>Wet Bags</label>
                   <input
+                    suppressHydrationWarning={true}
                     type="number"
                     value={manualRecord.wet}
                     onChange={(e) => setManualRecord(prev => ({ ...prev, wet: Number(e.target.value) }))}

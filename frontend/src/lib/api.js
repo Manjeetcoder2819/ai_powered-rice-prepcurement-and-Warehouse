@@ -137,6 +137,12 @@ export const addStockEntry = async (data) => {
   return response.data;
 };
 
+export const deleteStockEntry = async (id) => {
+  const response = await api.delete(`/warehouse/ledger/${id}`);
+  return response.data;
+};
+
+
 /* =========================================================
 WEATHER
 ========================================================= */

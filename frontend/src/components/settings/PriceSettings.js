@@ -6,7 +6,7 @@ import { getVarietyPrices, saveVarietyPrice } from "@/lib/priceApi";
 
 const PRICE_FORM_DEFAULT = {
   variety: "",
-  price_per_mt: "",
+  price_per_kg: "",
 };
 
 export default function PriceSettings() {
@@ -20,7 +20,7 @@ export default function PriceSettings() {
   }, []);
 
   const handleSave = async () => {
-    if (!form.variety || !form.price_per_mt) {
+    if (!form.variety || !(form.price_per_kg || form.price_per_mt)) {
       toast.error("Please select a variety and enter a price");
       return;
     }
@@ -28,7 +28,7 @@ export default function PriceSettings() {
     try {
       const saved = await saveVarietyPrice({
         variety: form.variety,
-        price_per_mt: Number(form.price_per_mt),
+        price_per_kg: Number(form.price_per_kg || form.price_per_mt),
       });
       setPrices((prev) => {
         const existing = prev.find((item) => item.variety === saved.variety);
@@ -52,7 +52,7 @@ export default function PriceSettings() {
       <div style={sectionCard}>
         <h2 style={sectionTitle}>Variety Price List</h2>
         <p style={sectionText}>
-          Set rice prices per MT by variety, then save them for stock value
+          Set rice prices per Kg by variety, then save them for stock value
           estimates and procurement planning.
         </p>
       </div>
@@ -64,6 +64,7 @@ export default function PriceSettings() {
             <div style={fieldGroup}>
               <label style={label}>Variety</label>
               <input
+                suppressHydrationWarning={true}
                 value={form.variety}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, variety: event.target.value }))
@@ -74,18 +75,19 @@ export default function PriceSettings() {
             </div>
 
             <div style={fieldGroup}>
-              <label style={label}>Price per MT (₹)</label>
+              <label style={label}>Price per Kg (₹)</label>
               <input
+                suppressHydrationWarning={true}
                 type="number"
-                value={form.price_per_mt}
+                value={form.price_per_kg || form.price_per_mt || ""}
                 onChange={(event) =>
                   setForm((prev) => ({
                     ...prev,
-                    price_per_mt: event.target.value,
+                    price_per_kg: event.target.value,
                   }))
                 }
                 style={inputStyle}
-                placeholder="e.g. 33000"
+                placeholder="e.g. 33"
               />
             </div>
 
@@ -104,7 +106,7 @@ export default function PriceSettings() {
               prices.map((price) => (
                 <div key={price.variety} style={priceRow}>
                   <span>{price.variety}</span>
-                  <span>₹ {price.price_per_mt.toLocaleString()}</span>
+                  <span>₹ {(price.price_per_kg ?? price.price_per_mt)?.toLocaleString()}</span>
                 </div>
               ))
             )}

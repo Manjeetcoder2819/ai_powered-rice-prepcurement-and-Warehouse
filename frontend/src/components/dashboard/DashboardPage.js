@@ -10,46 +10,73 @@ import {
   getVehicles,
   sendRainAlert,
   predictFarmer,
+  getStock,
 } from '@/lib/api'
+import StockPieChart from './StockPieChart'
 
 /* =========================================================
    DEMO COMPONENTS
 ========================================================= */
 
-function DonutChart({ goodPct, wetPct, total }) {
+function DonutChart({ goodPct, wetPct, damagedPct, total }) {
   const gp = parseFloat(goodPct) || 0;
   const wp = parseFloat(wetPct) || 0;
+  const dp = parseFloat(damagedPct) || 0;
   const hasBags = total > 0;
-  
-  const totalPct = Math.min(100, gp + wp);
-  const gradient = hasBags
-    ? `conic-gradient(
-        #16a34a 0% ${gp}%,
-        #ea580c ${gp}% ${totalPct}%,
-        #dc2626 ${totalPct}% 100%
-      )`
-    : '#cbd5e1'; // neutral slate gray fallback
+
+  const r = 50, cx = 75, cy = 75;
+  const circ = 2 * Math.PI * r;
+
+  const goodDash = (gp / 100) * circ;
+  const wetDash = (wp / 100) * circ;
+  const dmgDash = (dp / 100) * circ;
+
+  const goodOffset = -circ * 0.25;
+  const wetOffset = goodOffset - goodDash;
+  const dmgOffset = wetOffset - wetDash;
+
+  const transitionStyle = {
+    transition: "stroke-dasharray 0.6s cubic-bezier(0.4, 0, 0.2, 1), stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1)"
+  };
 
   return (
     <div
       style={{
         width: 150,
         height: 150,
-        borderRadius: '50%',
-        background: gradient,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         position: 'relative',
         flexShrink: 0,
       }}
     >
+      <svg width="150" height="150" viewBox="0 0 150 150">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth="14" />
+        {hasBags && (
+          <>
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#16a34a" strokeWidth="14"
+              strokeDasharray={`${goodDash} ${circ - goodDash}`}
+              strokeDashoffset={goodOffset}
+              style={transitionStyle}
+              strokeLinecap="round"
+            />
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ea580c" strokeWidth="14"
+              strokeDasharray={`${wetDash} ${circ - wetDash}`}
+              strokeDashoffset={wetOffset}
+              style={transitionStyle}
+              strokeLinecap="round"
+            />
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#dc2626" strokeWidth="14"
+              strokeDasharray={`${dmgDash} ${circ - dmgDash}`}
+              strokeDashoffset={dmgOffset}
+              style={transitionStyle}
+              strokeLinecap="round"
+            />
+          </>
+        )}
+      </svg>
       <div
         style={{
-          width: 95,
-          height: 95,
-          borderRadius: '50%',
-          background: '#ffffff',
+          position: 'absolute',
+          inset: 0,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -57,15 +84,9 @@ function DonutChart({ goodPct, wetPct, total }) {
         }}
       >
         <div style={{ fontSize: 24, fontWeight: 800 }}>
-          {hasBags ? `${goodPct}%` : 'N/A'}
+          {hasBags ? `${gp.toFixed(1)}%` : 'N/A'}
         </div>
-
-        <div
-          style={{
-            fontSize: 11,
-            color: '#6b7280',
-          }}
-        >
+        <div style={{ fontSize: 11, color: '#6b7280' }}>
           {hasBags ? 'Good' : 'No Bags'}
         </div>
       </div>
@@ -73,19 +94,7 @@ function DonutChart({ goodPct, wetPct, total }) {
   )
 }
 
-function StockPieChart() {
-  return (
-    <div
-      style={{
-        width: 130,
-        height: 130,
-        borderRadius: '50%',
-        background:
-          'conic-gradient(#2563eb 0% 62%, #e5e7eb 62% 100%)',
-      }}
-    />
-  )
-}
+// StockPieChart is imported from ./StockPieChart
 
 /* =========================================================
    AI QUALITY TREND AREA CHART (CUSTOM SVG)
@@ -333,6 +342,7 @@ function AISimulator({ queuePosition = 1 }) {
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#4b5563', marginBottom: 4 }}>Rice Variety</label>
             <select 
+              suppressHydrationWarning={true}
               value={variety} 
               onChange={(e) => setVariety(e.target.value)} 
               style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13 }}
@@ -354,6 +364,7 @@ function AISimulator({ queuePosition = 1 }) {
               <span>{bags} bags</span>
             </div>
             <input 
+              suppressHydrationWarning={true}
               type="range" 
               min="20" 
               max="500" 
@@ -506,17 +517,19 @@ export default function DashboardPage({ onNavigate }) {
   const [farmers, setFarmers] = useState([])
   const [batches, setBatches] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [stock, setStock] = useState([])
   const [loading, setLoading] = useState(true)
   const [chartView, setChartView] = useState('latest')
 
   const load = useCallback(async () => {
     try {
-      const [k, a, f, b, v] = await Promise.all([
+      const [k, a, f, b, v, s] = await Promise.all([
         getDashboardKPIs(),
         getAlerts(),
         getFarmers(),
         getBatches(),
         getVehicles(),
+        getStock().catch(() => []),
       ])
 
       setKpis(k)
@@ -524,8 +537,9 @@ export default function DashboardPage({ onNavigate }) {
       setFarmers(f)
       setBatches(b)
       setVehicles(v)
+      setStock(s || [])
     } catch (error) {
-      console.log(error)
+      console.error(error)
     } finally {
       setLoading(false)
     }
@@ -614,8 +628,8 @@ export default function DashboardPage({ onNavigate }) {
         <KPICard
           icon="🌾"
           label="Rice Procured"
-          value={K.rice_procured_mt}
-          unit=" MT"
+          value={K.rice_procured_kg?.toLocaleString() || K.rice_procured_mt?.toLocaleString()}
+          unit=" Kg"
         />
 
         <KPICard
@@ -634,8 +648,8 @@ export default function DashboardPage({ onNavigate }) {
         <KPICard
           icon="🏛"
           label="Warehouse Stock"
-          value={K.warehouse_stock_mt}
-          unit=" MT"
+          value={K.warehouse_stock_kg?.toLocaleString() || K.warehouse_stock_mt?.toLocaleString()}
+          unit=" Kg"
         />
 
         <KPICard
@@ -794,6 +808,7 @@ export default function DashboardPage({ onNavigate }) {
             <DonutChart
               goodPct={goodPct}
               wetPct={wetPct}
+              damagedPct={damagedPct}
               total={totalBags}
             />
 
@@ -917,15 +932,15 @@ export default function DashboardPage({ onNavigate }) {
               </div>
 
               <div style={bigNumber}>
-                {K.warehouse_stock_mt}
+                {(K.warehouse_stock_kg ?? K.warehouse_stock_mt)?.toLocaleString()}
                 <span style={unitText}>
-                  MT
+                  Kg
                 </span>
               </div>
 
               <div style={smallGray}>
                 Capacity:{' '}
-                {K.warehouse_capacity_mt} MT
+                {(K.warehouse_capacity_kg ?? K.warehouse_capacity_mt)?.toLocaleString()} Kg
               </div>
 
               <div style={progressBar}>
@@ -942,7 +957,7 @@ export default function DashboardPage({ onNavigate }) {
               </div>
             </div>
 
-            <StockPieChart />
+            <StockPieChart stock={stock.length ? stock : DEMO_STOCK} />
           </div>
         </div>
 
@@ -1282,6 +1297,7 @@ const progressBar = {
 const progressFill = {
   height: '100%',
   background: '#16a34a',
+  transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
 }
 
 const weatherBox = {
@@ -1310,17 +1326,25 @@ const rainBtn = {
 const DEMO_KPIS = {
   farmers_in_queue: 24,
   farmers_delta: -8,
-  rice_procured_mt: 128.45,
+  rice_procured_kg: 128450,
   rice_delta_pct: 12.5,
   bags_counted: 2543,
   bags_today: 156,
   damaged_bags: 37,
   damaged_pct: 1.45,
-  warehouse_stock_mt: 1245.8,
-  warehouse_capacity_mt: 2000,
+  warehouse_stock_kg: 1245800,
+  warehouse_capacity_kg: 2000000,
   warehouse_pct: 62,
   alerts_today: 12,
 }
+
+const DEMO_STOCK = [
+  { variety: 'Sona Masoori', qty_kg: 2200000, capacity_kg: 2500000, color: '#2e7d45' },
+  { variety: 'IR-64',        qty_kg: 1800000, capacity_kg: 2500000, color: '#1976d2' },
+  { variety: 'Basmati',      qty_kg: 1500000, capacity_kg: 2500000, color: '#f5a623' },
+  { variety: 'HMT',          qty_kg: 450000,  capacity_kg: 1000000, color: '#0f6e56' },
+  { variety: 'IR-36',        qty_kg: 200000,  capacity_kg: 1000000, color: '#993c1d' },
+]
 
 const DEMO_FARMERS = [
   {
