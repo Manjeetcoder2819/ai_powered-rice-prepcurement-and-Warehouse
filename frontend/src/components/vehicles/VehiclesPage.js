@@ -9,6 +9,8 @@ import {
   cancelVehicleBooking,
   autoScheduleVehicles,
   sendSMS,
+  gateVerify,
+  resetSimulatorDB,
 } from "@/lib/api";
 
 /* =========================================================
@@ -36,6 +38,13 @@ const STATUS_CFG = {
     label: "Offline",
     icon: "🔧",
   },
+
+  arrived: {
+    bg: "#e8f5ec",
+    color: "#2d7a3e",
+    label: "Arrived",
+    icon: "✅",
+  },
 };
 
 /* =========================================================
@@ -44,7 +53,6 @@ const STATUS_CFG = {
 
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState([]);
-
   const [showAdd, setShowAdd] = useState(false);
 
   const [form, setForm] = useState({
@@ -57,6 +65,30 @@ export default function VehiclesPage() {
     status: "standby",
   });
 
+  // ANPR Simulator states
+  const [selectedPlate, setSelectedPlate] = useState("MH14CD9087");
+  const [ocrConfidence, setOcrConfidence] = useState(0.95);
+  const [verifyResult, setVerifyResult] = useState(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [simulatedTime, setSimulatedTime] = useState("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      const mm = pad(now.getMonth() + 1);
+      const dd = pad(now.getDate());
+      const hh = pad(now.getHours());
+      const min = pad(now.getMinutes());
+      const ss = pad(now.getSeconds());
+      setSimulatedTime(`${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     getVehicles()
       .then(setVehicles)
@@ -65,21 +97,14 @@ export default function VehiclesPage() {
 
   const V = vehicles.length ? vehicles : DEMO_VEHICLES;
 
-  const active = V.filter((v) => v.status === "enroute").length;
-
+  const active = V.filter((v) => v.status === "enroute" || v.status === "arrived").length;
   const standby = V.filter((v) => v.status === "standby").length;
-
   const offline = V.filter((v) => v.status === "offline").length;
-
-  /* =========================================================
-     AUTO SCHEDULE
-  ========================================================= */
 
   const handleAutoSchedule = async () => {
     try {
       const result = await autoScheduleVehicles();
       const refreshed = await getVehicles();
-
       setVehicles(refreshed);
       toast.success(result.message || "AI auto-scheduling complete!");
     } catch {
@@ -87,72 +112,42 @@ export default function VehiclesPage() {
     }
   };
 
-  /* =========================================================
-     SEND DRIVER SMS
-  ========================================================= */
-
   const handleSMSDriver = async (vehicle) => {
     try {
       await sendSMS({
         recipient_type: "driver",
-
         mobile: vehicle.driver_mobile,
-
         message_type: "vehicle",
-
         message: `Driver ${vehicle.driver}, Route: ${vehicle.route}. Load: ${vehicle.load}`,
       });
-
       toast.success(`SMS sent to ${vehicle.driver}`);
     } catch {
       toast.error("SMS failed");
     }
   };
 
-  /* =========================================================
-     UPDATE STATUS
-  ========================================================= */
-
   const handleStatusUpdate = async (id, status) => {
     try {
       const updated = await updateVehicle(id, { status });
-
       setVehicles((prev) =>
         prev.map((v) =>
-          v.id === id
-            ? {
-                ...v,
-                ...updated,
-              }
-            : v,
-        ),
+          v.id === id ? { ...v, ...updated } : v
+        )
       );
-
       toast.success(`Vehicle ${id} updated`);
     } catch {
       toast.error("Update failed");
     }
   };
 
-  /* =========================================================
-     CANCEL BOOKING
-  ========================================================= */
-
   const handleCancelBooking = async (id) => {
     try {
       const updated = await cancelVehicleBooking(id);
-
       setVehicles((prev) =>
         prev.map((v) =>
-          v.id === id
-            ? {
-                ...v,
-                ...updated,
-              }
-            : v,
-        ),
+          v.id === id ? { ...v, ...updated } : v
+        )
       );
-
       toast.success(`Booking cancelled for ${id}`);
     } catch {
       setVehicles((prev) =>
@@ -166,40 +161,104 @@ export default function VehiclesPage() {
                 schedule_time: "",
                 status: "standby",
               }
-            : v,
-        ),
+            : v
+        )
       );
-
       toast.success(`Booking cancelled locally for ${id}`);
     }
   };
 
-  /* =========================================================
-     ADD VEHICLE
-  ========================================================= */
-
   const handleAdd = async () => {
     if (!form.id || !form.driver) {
       toast.error("Fill required fields");
-
       return;
     }
-
     try {
       const vehicle = await createVehicle(form);
-
       setVehicles((prev) => [...prev, vehicle]);
-
       setShowAdd(false);
-
       toast.success(`Vehicle ${vehicle.id} added`);
     } catch {
       toast.error("Failed to add vehicle");
     }
   };
 
+  const handlePlateChange = (plate) => {
+    if (plate === "Blurry Plate") {
+      setSelectedPlate("MH14CD9087"); // Use Ramesh Yadav's plate to scan but with low conf
+      setOcrConfidence(0.55);
+    } else {
+      setSelectedPlate(plate);
+      setOcrConfidence(0.95);
+    }
+    setVerifyResult(null);
+  };
+
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleResetSimulator = async () => {
+    setResetLoading(true);
+    try {
+      const res = await resetSimulatorDB();
+      toast.success(res.message || "Simulator database successfully reset!");
+      setVerifyResult(null);
+      getVehicles().then(setVehicles).catch(() => {});
+    } catch (err) {
+      toast.error("Failed to reset simulator database.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleVerify = async (override = false) => {
+    setVerifyLoading(true);
+    try {
+      const res = await gateVerify({
+        vehicle_id: selectedPlate,
+        override: override,
+        confidence: ocrConfidence,
+      });
+      setVerifyResult(res);
+      if (res.status === "allowed") {
+        toast.success(res.reason || "Gate access allowed!");
+        getVehicles().then(setVehicles).catch(() => {});
+      } else if (res.status === "denied") {
+        toast.error(res.reason || "Gate access denied.");
+      } else {
+        toast.warn(res.reason || "Warning / Low confidence plate read.");
+      }
+    } catch (err) {
+      toast.error("Failed to run ANPR gate verification.");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
   return (
     <div style={pageStyle}>
+      <style>{`
+        @keyframes scanline {
+          0% { top: 0%; }
+          50% { top: 100%; }
+          100% { top: 0%; }
+        }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        @keyframes pulse-allowed {
+          0%, 100% { box-shadow: inset 0 0 15px rgba(16, 185, 129, 0.3), 0 0 8px rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.5); }
+          50% { box-shadow: inset 0 0 30px rgba(16, 185, 129, 0.6), 0 0 15px rgba(16, 185, 129, 0.4); border-color: rgba(16, 185, 129, 1); }
+        }
+        @keyframes pulse-denied {
+          0%, 100% { box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.3), 0 0 8px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
+          50% { box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.6), 0 0 15px rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 1); }
+        }
+        @keyframes pulse-warning {
+          0%, 100% { box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.3), 0 0 8px rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.5); }
+          50% { box-shadow: inset 0 0 30px rgba(245, 158, 11, 0.6), 0 0 15px rgba(245, 158, 11, 0.4); border-color: rgba(245, 158, 11, 1); }
+        }
+      `}</style>
       {/* =========================================================
           KPI SECTION
       ========================================================= */}
@@ -244,6 +303,387 @@ export default function VehiclesPage() {
             <div style={kpiLabel}>{kpi.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* =========================================================
+          ANPR GATE VERIFICATION SIMULATOR
+      ========================================================= */}
+
+      <div style={{
+        background: "#1e293b",
+        color: "#ffffff",
+        padding: 20,
+        borderRadius: 14,
+        border: "1px solid #334155",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        marginTop: 4
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 700, borderBottom: "1px solid #334155", paddingBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          📷 ANPR Gate Verification Simulator (Camera Feed)
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 20 }}>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#cbd5e1" }}>
+              Simulate Arrival at Entry Gate (Plate OCR)
+            </label>
+            <select
+              value={ocrConfidence === 0.55 && selectedPlate === "MH14CD9087" ? "Blurry Plate" : selectedPlate}
+              onChange={(e) => handlePlateChange(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #475569",
+                borderRadius: 8,
+                background: "#0f172a",
+                color: "#ffffff",
+                outline: "none",
+                fontSize: 13
+              }}
+            >
+              <option value="MH14CD9087">MH14CD9087 (Registered, Ramesh Yadav - Slot 09:00 AM)</option>
+              <option value="MH12AB4521">MH12AB4521 (Registered, Sita Devi - Slot 11:30 AM)</option>
+              <option value="MH12EF3344">MH12EF3344 (Offline/Maintenance Truck)</option>
+              <option value="MH99ZZ9999">MH99ZZ9999 (Unregistered Vehicle - Denied)</option>
+              <option value="Blurry Plate">Blurry Plate Scanned (Low confidence warning)</option>
+            </select>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#cbd5e1" }}>
+                OCR Camera Read Confidence: {Math.round(ocrConfidence * 100)}%
+              </label>
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={ocrConfidence}
+                onChange={(e) => {
+                  setOcrConfidence(parseFloat(e.target.value));
+                  setVerifyResult(null);
+                }}
+                style={{ width: "100%", accentColor: "#3b82f6", cursor: "pointer" }}
+              />
+            </div>
+
+            <button
+              onClick={() => handleVerify(false)}
+              disabled={verifyLoading}
+              style={{
+                width: "100%",
+                padding: "10px",
+                marginTop: 14,
+                borderRadius: 8,
+                border: "none",
+                background: "#3b82f6",
+                color: "#ffffff",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: 13
+              }}
+            >
+              {verifyLoading ? "Scanning plate..." : "📸 Trigger Camera Plate OCR Check"}
+            </button>
+
+            <button
+              onClick={handleResetSimulator}
+              disabled={resetLoading}
+              style={{
+                width: "100%",
+                padding: "10px",
+                marginTop: 10,
+                borderRadius: 8,
+                border: "1px dashed #475569",
+                background: "transparent",
+                color: "#94a3b8",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: 13,
+                transition: "all 0.2s"
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = "rgba(71, 85, 105, 0.2)";
+                e.currentTarget.style.color = "#ffffff";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "#94a3b8";
+              }}
+            >
+              {resetLoading ? "Resetting DB..." : "🔄 Reset Simulator Database State"}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Camera Viewport Container */}
+            <div style={{
+              position: "relative",
+              width: "100%",
+              height: 180,
+              background: "#020617",
+              borderRadius: 12,
+              overflow: "hidden",
+              border: verifyResult ? (
+                verifyResult.status === "allowed" ? "2px solid #10b981" :
+                verifyResult.status === "denied" ? "2px solid #ef4444" :
+                "2px solid #f59e0b"
+              ) : "2px solid #334155",
+              boxShadow: "inset 0 0 20px rgba(0,0,0,0.8)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              animation: verifyResult ? (
+                verifyResult.status === "allowed" ? "pulse-allowed 2s infinite" :
+                verifyResult.status === "denied" ? "pulse-denied 2s infinite" :
+                "pulse-warning 2s infinite"
+              ) : "none"
+            }}>
+              {/* Scanline Animation Effect */}
+              <div style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                height: "3px",
+                background: verifyResult ? (
+                  verifyResult.status === "allowed" ? "#10b981" :
+                  verifyResult.status === "denied" ? "#ef4444" :
+                  "#f59e0b"
+                ) : "#22c55e",
+                boxShadow: verifyResult ? (
+                  verifyResult.status === "allowed" ? "0 0 8px #10b981, 0 0 16px #10b981" :
+                  verifyResult.status === "denied" ? "0 0 8px #ef4444, 0 0 16px #ef4444" :
+                  "0 0 8px #f59e0b, 0 0 16px #f59e0b"
+                ) : "0 0 8px #22c55e, 0 0 16px #22c55e",
+                zIndex: 10,
+                pointerEvents: "none",
+                animation: verifyLoading ? "scanline 0.8s infinite linear" : "scanline 4.0s infinite ease-in-out"
+              }} />
+
+              {/* Viewfinder Corner Brackets */}
+              <div style={{ position: "absolute", top: 12, left: 12, width: 14, height: 14, borderLeft: "2px solid #475569", borderTop: "2px solid #475569" }} />
+              <div style={{ position: "absolute", top: 12, right: 12, width: 14, height: 14, borderRight: "2px solid #475569", borderTop: "2px solid #475569" }} />
+              <div style={{ position: "absolute", bottom: 12, left: 12, width: 14, height: 14, borderLeft: "2px solid #475569", borderBottom: "2px solid #475569" }} />
+              <div style={{ position: "absolute", bottom: 12, right: 12, width: 14, height: 14, borderRight: "2px solid #475569", borderBottom: "2px solid #475569" }} />
+
+              {/* Camera Overlays */}
+              <div style={{
+                position: "absolute",
+                top: 8,
+                left: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 9,
+                fontFamily: "monospace",
+                color: "#ef4444",
+                fontWeight: "bold"
+              }}>
+                <div style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#ef4444",
+                  animation: "blink 1.5s infinite"
+                }} />
+                LIVE REC
+              </div>
+              <div style={{ position: "absolute", top: 8, right: 12, fontSize: 9, fontFamily: "monospace", color: "#64748b" }}>
+                CAM-01 / APMC ENTRY
+              </div>
+              <div style={{ position: "absolute", bottom: 8, left: 12, fontSize: 9, fontFamily: "monospace", color: "#64748b" }}>
+                {simulatedTime || "2026-06-25 15:42:00"}
+              </div>
+              <div style={{ position: "absolute", bottom: 8, right: 12, fontSize: 9, fontFamily: "monospace", color: "#64748b" }}>
+                1080P 30FPS
+              </div>
+
+              {/* Indian License Plate in Center */}
+              <div style={{
+                position: "relative",
+                width: 190,
+                height: 44,
+                background: "#f8fafc",
+                borderRadius: 5,
+                border: "2px solid #0f172a",
+                boxShadow: "0 10px 15px -3px rgba(0,0,0,0.5), 0 4px 6px -2px rgba(0,0,0,0.3)",
+                display: "flex",
+                alignItems: "center",
+                overflow: "hidden",
+                transform: verifyLoading ? "scale(0.96)" : "scale(1)",
+                transition: "transform 0.2s ease"
+              }}>
+                {/* IND blue strip on left */}
+                <div style={{
+                  width: 18,
+                  height: "100%",
+                  background: "#0038a8",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "4px 0",
+                  color: "#ffffff"
+                }}>
+                  {/* Ashoka chakra representation (yellow star/circle) */}
+                  <div style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: "50%",
+                    background: "#facc15",
+                    boxShadow: "0 0 2px #eab308"
+                  }} />
+                  <span style={{ fontSize: 5, fontWeight: 800, letterSpacing: 0.5, fontFamily: "sans-serif" }}>IND</span>
+                </div>
+                {/* Plate text */}
+                <div style={{
+                  flex: 1,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  color: "#0f172a",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  fontFamily: "'Courier New', Courier, monospace",
+                  letterSpacing: 2,
+                  paddingRight: 4
+                }}>
+                  {selectedPlate.replace(/([A-Z]{2})(\d{2})([A-Z]{2})(\d{4})/, "$1 $2 $3 $4")}
+                </div>
+              </div>
+
+              {/* Scanning Laser HUD overlay */}
+              {verifyLoading && (
+                <div style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(34, 197, 94, 0.05)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#22c55e",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  fontFamily: "monospace",
+                  letterSpacing: 1,
+                  pointerEvents: "none"
+                }}>
+                  SCANNING PLATE...
+                </div>
+              )}
+
+              {/* Gate Access Result Banner Overlay */}
+              {verifyResult && !verifyLoading && (
+                <div style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: verifyResult.status === "allowed" ? "rgba(16, 185, 129, 0.1)" : (verifyResult.status === "denied" ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)"),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  pointerEvents: "none",
+                  zIndex: 20
+                }}>
+                  <div style={{
+                    padding: "4px 10px",
+                    background: verifyResult.status === "allowed" ? "#10b981" : (verifyResult.status === "denied" ? "#ef4444" : "#f59e0b"),
+                    color: "#ffffff",
+                    borderRadius: 4,
+                    fontSize: 10,
+                    fontWeight: 900,
+                    fontFamily: "monospace",
+                    letterSpacing: 1.5,
+                    boxShadow: "0 4px 6px rgba(0,0,0,0.3)",
+                    textTransform: "uppercase"
+                  }}>
+                    {verifyResult.status === "allowed" ? "ACCESS GRANTED" : (verifyResult.status === "denied" ? "ACCESS DENIED" : "VERIFICATION PENDING")}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Results Feedback Details Pane */}
+            <div style={{
+              background: "#0f172a",
+              borderRadius: 10,
+              padding: 14,
+              border: "1px solid #334155",
+              minHeight: 80
+            }}>
+              {!verifyResult ? (
+                <div style={{ textAlign: "center", color: "#64748b", fontSize: 13, padding: "10px 0" }}>
+                  Awaiting vehicle arrival at APMC Pimpri entry gate.<br />Select a vehicle and trigger OCR to scan.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: verifyResult.status === "allowed" ? "#10b981" : (verifyResult.status === "denied" ? "#ef4444" : "#f59e0b")
+                    }} />
+                    <strong style={{
+                      textTransform: "uppercase",
+                      color: verifyResult.status === "allowed" ? "#10b981" : (verifyResult.status === "denied" ? "#ef4444" : "#f59e0b"),
+                      fontSize: 13,
+                      letterSpacing: 0.5
+                    }}>
+                      {verifyResult.status.replace("_", " ")}
+                    </strong>
+                  </div>
+                  <div style={{ fontSize: 13, color: "#cbd5e1", lineHeight: "1.4" }}>{verifyResult.reason}</div>
+                  
+                  {verifyResult.farmer && (
+                    <div style={{
+                      fontSize: 11,
+                      background: "#1e293b",
+                      padding: 10,
+                      borderRadius: 8,
+                      color: "#94a3b8",
+                      border: "1px solid #334155",
+                      lineHeight: "1.5"
+                    }}>
+                      <div style={{ fontWeight: 700, color: "#cbd5e1", borderBottom: "1px solid #334155", paddingBottom: 4, marginBottom: 6 }}>
+                        🌾 Associated Farmer Booking
+                      </div>
+                      <strong>Farmer Name:</strong> {verifyResult.farmer.name} | <strong>Mobile:</strong> {verifyResult.farmer.mobile}<br />
+                      <strong>Variety:</strong> {verifyResult.farmer.variety} | <strong>Est. Bags:</strong> {verifyResult.farmer.bags}<br />
+                      <strong>Scheduled Slot:</strong> {verifyResult.farmer.slot_date} at {verifyResult.farmer.slot_time}
+                    </div>
+                  )}
+
+                  {(verifyResult.status === "wrong_slot" || verifyResult.status === "manual_verification") && (
+                    <button
+                      onClick={() => handleVerify(true)}
+                      style={{
+                        padding: "10px",
+                        borderRadius: 8,
+                        border: "1px solid #f59e0b",
+                        background: "rgba(245, 158, 11, 0.15)",
+                        color: "#f59e0b",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontSize: 12,
+                        marginTop: 6,
+                        transition: "background 0.2s",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = "rgba(245, 158, 11, 0.25)"}
+                      onMouseOut={(e) => e.currentTarget.style.background = "rgba(245, 158, 11, 0.15)"}
+                    >
+                      ⚠️ Authorize Manual Gate Override (Allow Entry)
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* =========================================================
@@ -297,7 +737,12 @@ export default function VehiclesPage() {
 
             <tbody>
               {V.map((vehicle) => {
-                const cfg = STATUS_CFG[vehicle.status];
+                const cfg = STATUS_CFG[vehicle.status] || {
+                  bg: "#f3f4f6",
+                  color: "#374151",
+                  label: vehicle.status || "Unknown",
+                  icon: "🚚",
+                };
 
                 return (
                   <tr key={vehicle.id}>

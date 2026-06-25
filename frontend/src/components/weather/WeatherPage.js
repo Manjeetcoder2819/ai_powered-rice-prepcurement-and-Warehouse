@@ -15,7 +15,6 @@ export default function WeatherPage() {
   const [lowerThreshold, setLowerThreshold] = useState(30)
   const [isMounted, setIsMounted] = useState(false)
   const [alertSent, setAlertSent] = useState(false)
-
   // Simulation parameters
   const [simulatedRainRisk, setSimulatedRainRisk] = useState(68)
   const [simulatedTemp, setSimulatedTemp] = useState(29)
@@ -28,10 +27,24 @@ export default function WeatherPage() {
     const savedLower = localStorage.getItem('lower_threshold')
     if (savedUpper) setUpperThreshold(parseInt(savedUpper))
     if (savedLower) setLowerThreshold(parseInt(savedLower))
+
+    const savedRain = localStorage.getItem('simulated_rain_risk')
+    const savedTemp = localStorage.getItem('simulated_temp')
+    const savedHum = localStorage.getItem('simulated_humidity')
+    const savedWind = localStorage.getItem('simulated_wind')
+    if (savedRain) setSimulatedRainRisk(parseInt(savedRain))
+    if (savedTemp) setSimulatedTemp(parseInt(savedTemp))
+    if (savedHum) setSimulatedHumidity(parseInt(savedHum))
+    if (savedWind) setSimulatedWind(parseInt(savedWind))
   }, [])
 
   useEffect(() => {
     if (!isMounted) return
+    localStorage.setItem('simulated_rain_risk', simulatedRainRisk.toString())
+    localStorage.setItem('simulated_temp', simulatedTemp.toString())
+    localStorage.setItem('simulated_humidity', simulatedHumidity.toString())
+    localStorage.setItem('simulated_wind', simulatedWind.toString())
+
     getWeather({
       rain_risk: simulatedRainRisk,
       temp: simulatedTemp,

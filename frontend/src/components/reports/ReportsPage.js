@@ -1,925 +1,416 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import {
-  createFarmer,
-  deleteFarmer,
-  getFarmers,
-  sendBulkSMS,
-  sendSMS,
-  updateFarmerStatus,
-} from '@/lib/api'
+import { getWeeklySummary, downloadReport } from '@/lib/api'
 
-/* =========================================================
-   STATUS STYLE
-========================================================= */
-
-const STATUS_STYLE = {
-  waiting: {
-    bg: '#fff3e0',
-    color: '#e65100',
-    label: 'In Queue',
-  },
-
-  processing: {
-    bg: '#e8f0fe',
-    color: '#1976d2',
-    label: 'Processing',
-  },
-
-  done: {
-    bg: '#e8f5ec',
-    color: '#2d7a3e',
-    label: 'Done',
-  },
-
-  alert: {
-    bg: '#fff0f0',
-    color: '#e53935',
-    label: 'Damage Alert',
-  },
-}
-
-/* =========================================================
-   VARIETIES
-========================================================= */
-
-const VARIETIES = [
-  'Sona Masoori',
-  'IR-64',
-  'Basmati',
-  'HMT',
-  'IR-36',
-  'Pusa Basmati',
-  'Swarna',
-  'PR 106',
-]
-
-/* =========================================================
-   MAIN PAGE
-========================================================= */
-
-export default function QueuePage() {
-  const [farmers, setFarmers] = useState([])
-  const [search, setSearch] = useState('')
-  const [showModal, setShowModal] =
-    useState(false)
-
-  const [form, setForm] = useState({})
-
-  const [loading, setLoading] =
-    useState(false)
-
-  const load = useCallback(async () => {
-    try {
-      const data = await getFarmers()
-
-      setFarmers(data)
-    } catch (error) {
-      console.log(error)
-      setFarmers(DEMO_FARMERS)
-    }
-  }, [])
+export default function ReportsPage() {
+  const [weeklySummary, setWeeklySummary] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const initialLoad = setTimeout(load, 0)
-
-    const timer = setInterval(load, 20000)
-
-    return () => {
-      clearTimeout(initialLoad)
-      clearInterval(timer)
-    }
-  }, [load])
-
-  const filtered = farmers.filter(
-    (f) =>
-      f.name
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      f.token
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      f.variety
-        .toLowerCase()
-        .includes(search.toLowerCase())
-  )
-
-  const waiting = farmers.filter(
-    (f) => f.status === 'waiting'
-  ).length
-
-  const processing = farmers.filter(
-    (f) => f.status === 'processing'
-  ).length
-
-  const done = farmers.filter(
-    (f) => f.status === 'done'
-  ).length
-
-  /* =========================================================
-     CREATE FARMER
-  ========================================================= */
-
-  const handleCreate = async () => {
-    if (
-      !form.name ||
-      !form.mobile ||
-      !form.bags ||
-      !form.variety
-    ) {
-      toast.error(
-        'Please fill all required fields'
-      )
-
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const farmer = await createFarmer(form)
-
-      setFarmers((prev) => [
-        farmer,
-        ...prev,
-      ])
-
-      setShowModal(false)
-
-      setForm({})
-
-      toast.success(
-        `Token ${farmer.token} assigned`
-      )
-
-      await sendSMS({
-        recipient_type: 'farmer',
-        mobile: farmer.mobile,
-        message_type: 'queue',
-        message: `Welcome ${farmer.name}!`,
+    getWeeklySummary()
+      .then(setWeeklySummary)
+      .catch((err) => {
+        console.error("Failed to load weekly summary:", err)
+        setWeeklySummary(FALLBACK_WEEKLY)
       })
-    } catch {
-      toast.error(
-        'Failed to register farmer'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
+      .finally(() => setLoading(false))
+  }, [])
 
-  /* =========================================================
-     UPDATE STATUS
-  ========================================================= */
-
-  const handleStatus = async (
-    id,
-    status
-  ) => {
+  const handleDownload = (type, name) => {
     try {
-      const updated =
-        await updateFarmerStatus(
-          id,
-          status
-        )
-
-      setFarmers((prev) =>
-        prev.map((f) =>
-          f.id === id ? updated : f
-        )
-      )
-
-      toast.success(
-        `Status updated to ${status}`
-      )
-    } catch {
-      toast.error(
-        'Failed to update status'
-      )
+      const url = downloadReport(type)
+      window.open(url, '_blank')
+      toast.success(`${name} downloaded successfully`)
+    } catch (error) {
+      console.error(error)
+      toast.error(`Failed to download ${name}`)
     }
   }
 
-  /* =========================================================
-     BULK SMS
-  ========================================================= */
+  const reports = [
+    {
+      id: 'daily',
+      title: 'Daily Queue Report',
+      desc: 'Token allocations, farmer records, village data, bag counts, and entry timestamps.',
+      icon: '📋',
+      color: '#2563eb',
+      bgLight: '#eff6ff',
+    },
+    {
+      id: 'warehouse',
+      title: 'Warehouse Stock Report',
+      desc: 'Variety levels, utilized vs total capacity in Kg, zone mappings, and stock balances.',
+      icon: '🏢',
+      color: '#059669',
+      bgLight: '#ecfdf5',
+    },
+    {
+      id: 'damage',
+      title: 'Quality & Damage Report',
+      desc: 'AI-scanned bag counts, clean vs damaged/wet ratios, and quality deduction audit logs.',
+      icon: '⚠️',
+      color: '#dc2626',
+      bgLight: '#fef2f2',
+    },
+    {
+      id: 'vehicle',
+      title: 'Vehicle Logistics Report',
+      desc: 'Driver schedules, load descriptions, slot times, and gate verification progress.',
+      icon: '🚛',
+      color: '#7c3aed',
+      bgLight: '#f5f3ff',
+    },
+    {
+      id: 'sms',
+      title: 'SMS Notification Logs',
+      desc: 'Log records of SMS updates sent to farmers, drivers, and yard operators.',
+      icon: '📱',
+      color: '#ea580c',
+      bgLight: '#fff7ed',
+    },
+    {
+      id: 'weather',
+      title: 'Weather Monitor Log',
+      desc: 'Rain risk indicators, temperatures, alerts, and preventative yard actions logged.',
+      icon: '🌧️',
+      color: '#0891b2',
+      bgLight: '#ecfeff',
+    },
+  ]
 
-  const handleBulkSMS = async () => {
-    try {
-      const result =
-        await sendBulkSMS('queue')
-
-      toast.success(
-        `SMS sent to ${result.sent} farmers`
-      )
-    } catch {
-      toast.error(
-        'Failed to send bulk SMS'
-      )
-    }
-  }
+  // Calculate chart max bags for scaling
+  const maxBags = weeklySummary.length
+    ? Math.max(...weeklySummary.map(d => d.bags))
+    : 1
 
   return (
     <div style={pageStyle}>
-      {/* =========================================================
-          TOP KPI SECTION
-      ========================================================= */}
-
-      <div style={topBar}>
-        <div style={kpiRow}>
-          <KPISmall
-            label="In Queue"
-            value={waiting}
-            color="#e65100"
-          />
-
-          <KPISmall
-            label="Processing"
-            value={processing}
-            color="#1976d2"
-          />
-
-          <KPISmall
-            label="Done Today"
-            value={done}
-            color="#16a34a"
-          />
-
-          <KPISmall
-            label="Est. Clear"
-            value={`${Math.ceil(
-              waiting * 0.25
-            )}hr`}
-            color="#374151"
-          />
-        </div>
-
-        <div style={buttonRow}>
-          <button
-            onClick={handleBulkSMS}
-            style={secondaryButton}
-          >
-            📱 Bulk SMS
-          </button>
-
-          <button
-            onClick={() =>
-              setShowModal(true)
-            }
-            style={primaryButton}
-          >
-            + Register Farmer
-          </button>
+      {/* Title & Introduction */}
+      <div style={headerCard}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 32 }}>📊</span>
+          <div>
+            <h2 style={headerTitle}>Reports & Analytics Portal</h2>
+            <p style={headerSubtitle}>
+              Monitor APMC preprocurement metrics, check weekly performance, and download comprehensive dataset reports in CSV format.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* =========================================================
-          TABLE SECTION
-      ========================================================= */}
-
-      <div style={tableCard}>
-        <div style={tableHeader}>
-          <div style={titleStyle}>
-            Farmer Queue — Today
-          </div>
-
-          <div style={searchBox}>
-            <span>🔍</span>
-
-            <input
-              value={search}
-              onChange={(e) =>
-                setSearch(
-                  e.target.value
-                )
-              }
-              placeholder="Search farmer..."
-              style={searchInput}
-            />
+      {/* Main Layout Grid */}
+      <div style={mainGrid}>
+        
+        {/* DOWNLOAD REPORTS CARDS */}
+        <div>
+          <h3 style={sectionTitle}>Download Excel/CSV Datasets</h3>
+          <div style={cardsGrid}>
+            {reports.map((r) => (
+              <div key={r.id} style={reportCard}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ ...iconWrapper, background: r.bgLight, color: r.color }}>
+                    {r.icon}
+                  </div>
+                  <button 
+                    onClick={() => handleDownload(r.id, r.title)}
+                    style={{ ...downloadBtn, background: r.color }}
+                  >
+                    📥 Download
+                  </button>
+                </div>
+                <h4 style={cardTitle}>{r.title}</h4>
+                <p style={cardDesc}>{r.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Token</th>
-                <th>Name</th>
-                <th>Mobile</th>
-                <th>Village</th>
-                <th>Variety</th>
-                <th>Bags</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.map((f, index) => {
-                const s =
-                  STATUS_STYLE[f.status]
-
-                return (
-                  <tr key={f.id}>
-                    <td>{index + 1}</td>
-
-                    <td>{f.token}</td>
-
-                    <td>{f.name}</td>
-
-                    <td>{f.mobile}</td>
-
-                    <td>{f.village}</td>
-
-                    <td>{f.variety}</td>
-
-                    <td>{f.bags}</td>
-
-                    <td>
-                      <span
-                        style={{
-                          padding:
-                            '5px 10px',
-                          borderRadius: 999,
-                          background:
-                            s.bg,
-                          color: s.color,
-                          fontSize: 11,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {s.label}
-                      </span>
-                    </td>
-
-                    <td>
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: 6,
-                        }}
-                      >
-                        {f.status ===
-                          'waiting' && (
-                          <button
-                            onClick={() =>
-                              handleStatus(
-                                f.id,
-                                'processing'
-                              )
-                            }
-                            style={
-                              processButton
-                            }
-                          >
-                            ▶ Process
-                          </button>
-                        )}
-
-                        {f.status ===
-                          'processing' && (
-                          <button
-                            onClick={() =>
-                              handleStatus(
-                                f.id,
-                                'done'
-                              )
-                            }
-                            style={
-                              doneButton
-                            }
-                          >
-                            ✓ Done
-                          </button>
-                        )}
-
-                        <button
-                          onClick={async () => {
-                            try {
-                              await sendSMS({
-                                recipient_type: 'farmer',
-                                mobile: f.mobile,
-                                message_type: 'queue',
-                                message: `Dear ${f.name}, your token ${f.token} is ${STATUS_STYLE[f.status]?.label || f.status}. Estimated wait: ${f.wait_minutes || 0} min. - APMC`,
-                              })
-
-                              toast.success(
-                                `SMS sent to ${f.name}`
-                              )
-                            } catch {
-                              toast.error(
-                                'SMS failed'
-                              )
-                            }
-                          }}
-                          style={
-                            smsButton
-                          }
-                        >
-                          📱
-                        </button>
+        {/* WEEKLY PERFORMANCE GRAPH AND TABLE */}
+        <div style={sidebarSection}>
+          <h3 style={sectionTitle}>Weekly Procurement Summary</h3>
+          <div style={summaryCard}>
+            
+            {/* Visual Mini Chart */}
+            <div style={chartWrapper}>
+              <div style={chartHeader}>Bags Processed — Mon to Sun</div>
+              <div style={chartBars}>
+                {weeklySummary.map((d, idx) => {
+                  const pct = maxBags > 0 ? (d.bags / maxBags) * 100 : 0
+                  return (
+                    <div key={idx} style={barCol}>
+                      <div style={barWrapper}>
+                        <div 
+                          style={{ 
+                            ...barFill, 
+                            height: `${pct}%`,
+                            background: d.bags > 4000 ? '#16a34a' : d.bags > 0 ? '#3b82f6' : '#e5e7eb'
+                          }} 
+                          title={`${d.bags} Bags`}
+                        />
                       </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* =========================================================
-          MODAL
-      ========================================================= */}
-
-      {showModal && (
-        <div
-          onClick={() =>
-            setShowModal(false)
-          }
-          style={modalOverlay}
-        >
-          <div
-            onClick={(e) =>
-              e.stopPropagation()
-            }
-            style={modalBox}
-          >
-            <div style={modalHeader}>
-              <div style={titleStyle}>
-                Register Farmer
+                      <div style={barLabel}>{d.day}</div>
+                    </div>
+                  )
+                })}
               </div>
-
-              <button
-                onClick={() =>
-                  setShowModal(false)
-                }
-                style={closeBtn}
-              >
-                ✕
-              </button>
             </div>
 
-            <div style={modalContent}>
-              {/* NAME */}
-
-              <InputField
-                label="Farmer Name"
-                value={form.name || ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    name:
-                      e.target.value,
-                  })
-                }
-              />
-
-              {/* MOBILE */}
-
-              <InputField
-                label="Mobile"
-                value={form.mobile || ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    mobile:
-                      e.target.value,
-                  })
-                }
-              />
-
-              {/* VILLAGE */}
-
-              <InputField
-                label="Village"
-                value={form.village || ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    village:
-                      e.target.value,
-                  })
-                }
-              />
-
-              {/* AADHAAR */}
-
-              <InputField
-                label="Aadhaar Last 4"
-                value={
-                  form.aadhaar_last4 ||
-                  ''
-                }
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    aadhaar_last4:
-                      e.target.value,
-                  })
-                }
-              />
-
-              {/* VARIETY */}
-
-              <div>
-                <label style={labelStyle}>
-                  Variety
-                </label>
-
-                <select
-                  value={
-                    form.variety ||
-                    ''
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      variety:
-                        e.target
-                          .value,
-                    })
-                  }
-                  style={inputStyle}
-                >
-                  <option value="">
-                    Select Variety
-                  </option>
-
-                  {VARIETIES.map(
-                    (v) => (
-                      <option
-                        key={v}
-                      >
-                        {v}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-
-              {/* BAGS */}
-
-              <InputField
-                label="Bags"
-                type="number"
-                value={form.bags || ''}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    bags:
-                      parseInt(
-                        e.target
-                          .value
-                      ) || 0,
-                  })
-                }
-              />
+            {/* Weekly Table */}
+            <div style={tableWrapper}>
+              {loading ? (
+                <div style={loadingText}>Loading summary data...</div>
+              ) : (
+                <table style={summaryTable}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Day</th>
+                      <th style={thStyle}>Farmers</th>
+                      <th style={thStyle}>Bags</th>
+                      <th style={thStyle}>Damaged</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeklySummary.map((row, idx) => (
+                      <tr key={idx} style={idx % 2 === 0 ? trEvenStyle : trOddStyle}>
+                        <td style={tdStyle}><strong>{row.day}</strong></td>
+                        <td style={tdStyle}>{row.farmers}</td>
+                        <td style={tdStyle}>{row.bags.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, color: row.damaged > 0 ? '#dc2626' : '#6b7280' }}>
+                          {row.damaged > 0 ? `⚠️ ${row.damaged}` : '0'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
-            <div style={modalFooter}>
-              <button
-                onClick={() =>
-                  setShowModal(false)
-                }
-                style={
-                  secondaryButton
-                }
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={
-                  handleCreate
-                }
-                disabled={loading}
-                style={
-                  primaryButton
-                }
-              >
-                {loading
-                  ? 'Registering...'
-                  : '🎫 Register'}
-              </button>
-            </div>
           </div>
         </div>
-      )}
-    </div>
-  )
-}
 
-/* =========================================================
-   SMALL KPI CARD
-========================================================= */
-
-function KPISmall({
-  label,
-  value,
-  color,
-}) {
-  return (
-    <div style={smallKpiCard}>
-      <div
-        style={{
-          fontSize: 22,
-          fontWeight: 800,
-          color,
-        }}
-      >
-        {value}
-      </div>
-
-      <div style={smallKpiLabel}>
-        {label}
       </div>
     </div>
   )
 }
 
 /* =========================================================
-   INPUT FIELD
+   FALLBACK DATA
 ========================================================= */
-
-function InputField({
-  label,
-  value,
-  onChange,
-  type = 'text',
-}) {
-  return (
-    <div>
-      <label style={labelStyle}>
-        {label}
-      </label>
-
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        style={inputStyle}
-      />
-    </div>
-  )
-}
+const FALLBACK_WEEKLY = [
+  { day: 'Mon', bags: 3200, farmers: 98,  damaged: 45 },
+  { day: 'Tue', bags: 4100, farmers: 121, damaged: 62 },
+  { day: 'Wed', bags: 4650, farmers: 135, damaged: 38 },
+  { day: 'Thu', bags: 3800, farmers: 108, damaged: 55 },
+  { day: 'Fri', bags: 4820, farmers: 142, damaged: 37 },
+  { day: 'Sat', bags: 2900, farmers: 87,  damaged: 28 },
+  { day: 'Sun', bags: 0,    farmers: 0,   damaged: 0  },
+]
 
 /* =========================================================
    STYLES
 ========================================================= */
-
 const pageStyle = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 20,
-  padding: 20,
-  background: '#f8fafc',
-  minHeight: '100vh',
+  gap: 24,
+  padding: '10px 0',
 }
 
-const topBar = {
-  display: 'flex',
-  justifyContent:
-    'space-between',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  gap: 14,
-}
-
-const kpiRow = {
-  display: 'flex',
-  gap: 12,
-  flexWrap: 'wrap',
-}
-
-const buttonRow = {
-  display: 'flex',
-  gap: 10,
-}
-
-const smallKpiCard = {
+const headerCard = {
   background: '#ffffff',
-  borderRadius: 12,
-  padding: '14px 18px',
+  borderRadius: 16,
+  padding: 24,
   border: '1px solid #e5e7eb',
-  minWidth: 120,
 }
 
-const smallKpiLabel = {
-  fontSize: 11,
-  color: '#6b7280',
-  marginTop: 4,
-}
-
-const primaryButton = {
-  padding: '10px 18px',
-  borderRadius: 8,
-  border: 'none',
-  background: '#16a34a',
-  color: '#ffffff',
-  fontWeight: 700,
-  cursor: 'pointer',
-}
-
-const secondaryButton = {
-  padding: '10px 18px',
-  borderRadius: 8,
-  border:
-    '1px solid #d1d5db',
-  background: '#ffffff',
+const headerTitle = {
+  margin: 0,
+  fontSize: 22,
+  fontWeight: 800,
   color: '#111827',
-  fontWeight: 700,
-  cursor: 'pointer',
 }
 
-const tableCard = {
-  background: '#ffffff',
-  borderRadius: 14,
-  border: '1px solid #e5e7eb',
-  overflow: 'hidden',
+const headerSubtitle = {
+  margin: '8px 0 0 0',
+  color: '#4b5563',
+  fontSize: 14,
+  lineHeight: 1.5,
 }
 
-const tableHeader = {
-  padding: 16,
-  display: 'flex',
-  justifyContent:
-    'space-between',
-  alignItems: 'center',
-  borderBottom:
-    '1px solid #e5e7eb',
+const mainGrid = {
+  display: 'grid',
+  gridTemplateColumns: '1.4fr 1fr',
+  gap: 24,
 }
 
-const titleStyle = {
+const sectionTitle = {
+  margin: '0 0 16px 0',
   fontSize: 16,
-  fontWeight: 700,
+  fontWeight: 800,
+  color: '#1f2937',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
 }
 
-const searchBox = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  background: '#f3f4f6',
-  padding: '8px 12px',
-  borderRadius: 8,
+const cardsGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, 1fr)',
+  gap: 16,
 }
 
-const searchInput = {
-  border: 'none',
-  background: 'transparent',
-  outline: 'none',
-  width: 220,
-}
-
-const tableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-}
-
-const processButton = {
-  padding: '5px 10px',
-  borderRadius: 6,
-  border: 'none',
-  background: '#dbeafe',
-  color: '#2563eb',
-  fontWeight: 700,
-  cursor: 'pointer',
-  fontSize: 11,
-}
-
-const doneButton = {
-  padding: '5px 10px',
-  borderRadius: 6,
-  border: 'none',
-  background: '#dcfce7',
-  color: '#16a34a',
-  fontWeight: 700,
-  cursor: 'pointer',
-  fontSize: 11,
-}
-
-const smsButton = {
-  padding: '5px 10px',
-  borderRadius: 6,
-  border: 'none',
-  background: '#ffedd5',
-  color: '#ea580c',
-  fontWeight: 700,
-  cursor: 'pointer',
-  fontSize: 11,
-}
-
-const modalOverlay = {
-  position: 'fixed',
-  inset: 0,
-  background:
-    'rgba(0,0,0,0.5)',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  zIndex: 1000,
-}
-
-const modalBox = {
-  width: 500,
+const reportCard = {
   background: '#ffffff',
   borderRadius: 14,
-  overflow: 'hidden',
-}
-
-const modalHeader = {
-  padding: 18,
-  borderBottom:
-    '1px solid #e5e7eb',
-  display: 'flex',
-  justifyContent:
-    'space-between',
-  alignItems: 'center',
-}
-
-const modalContent = {
-  padding: 18,
+  padding: 20,
+  border: '1px solid #e5e7eb',
   display: 'flex',
   flexDirection: 'column',
-  gap: 14,
+  justifyContent: 'space-between',
+  minHeight: 180,
+  transition: 'transform 0.2s, box-shadow 0.2s',
+  cursor: 'default',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
 }
 
-const modalFooter = {
-  padding: 18,
-  borderTop:
-    '1px solid #e5e7eb',
+const iconWrapper = {
+  width: 42,
+  height: 42,
+  borderRadius: 10,
   display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 20,
+  fontWeight: 'bold',
 }
 
-const closeBtn = {
+const downloadBtn = {
+  padding: '6px 12px',
+  borderRadius: 6,
   border: 'none',
-  background: 'none',
-  fontSize: 18,
+  color: '#ffffff',
+  fontSize: 12,
+  fontWeight: 700,
   cursor: 'pointer',
 }
 
-const labelStyle = {
-  display: 'block',
-  marginBottom: 6,
+const cardTitle = {
+  margin: '16px 0 6px 0',
+  fontSize: 15,
+  fontWeight: 700,
+  color: '#111827',
+}
+
+const cardDesc = {
+  margin: 0,
+  fontSize: 12,
+  color: '#6b7280',
+  lineHeight: 1.5,
+}
+
+const sidebarSection = {
+  display: 'flex',
+  flexDirection: 'column',
+}
+
+const summaryCard = {
+  background: '#ffffff',
+  borderRadius: 16,
+  padding: 20,
+  border: '1px solid #e5e7eb',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 20,
+}
+
+const chartWrapper = {
+  border: '1px solid #f3f4f6',
+  borderRadius: 12,
+  padding: 16,
+  background: '#f9fafb',
+}
+
+const chartHeader = {
   fontSize: 12,
   fontWeight: 700,
-  color: '#374151',
+  color: '#4b5563',
+  marginBottom: 16,
+  textAlign: 'center',
 }
 
-const inputStyle = {
+const chartBars = {
+  display: 'flex',
+  justifyContent: 'space-around',
+  height: 100,
+  alignItems: 'flex-end',
+}
+
+const barCol = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  flex: 1,
+}
+
+const barWrapper = {
+  height: 80,
+  width: 14,
+  background: '#e5e7eb',
+  borderRadius: 4,
+  overflow: 'hidden',
+  display: 'flex',
+  alignItems: 'flex-end',
+}
+
+const barFill = {
   width: '100%',
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #d1d5db',
-  outline: 'none',
+  borderRadius: 4,
+  transition: 'height 0.4s ease',
 }
 
-/* =========================================================
-   DEMO DATA
-========================================================= */
+const barLabel = {
+  fontSize: 10,
+  color: '#6b7280',
+  marginTop: 6,
+  fontWeight: 600,
+}
 
-const DEMO_FARMERS = [
-  {
-    id: 1,
-    token: 'F024',
-    name: 'Ramesh Yadav',
-    mobile: '+91 98765 43210',
-    village: 'Hadapsar',
-    aadhaar_last4: '4321',
-    variety: 'Sona Masoori',
-    bags: 120,
-    arrived_at: '10:15 AM',
-    status: 'waiting',
-    wait_minutes: 12,
-  },
+const tableWrapper = {
+  overflowX: 'auto',
+}
 
-  {
-    id: 2,
-    token: 'F025',
-    name: 'Sita Devi',
-    mobile: '+91 97654 32109',
-    village: 'Wagholi',
-    aadhaar_last4: '8765',
-    variety: 'IR-64',
-    bags: 85,
-    arrived_at: '10:18 AM',
-    status: 'processing',
-    wait_minutes: 25,
-  },
+const loadingText = {
+  padding: 20,
+  textAlign: 'center',
+  color: '#6b7280',
+  fontSize: 13,
+}
 
-  {
-    id: 3,
-    token: 'F026',
-    name: 'Mahesh Kumar',
-    mobile: '+91 96543 21098',
-    village: 'Kharadi',
-    aadhaar_last4: '2341',
-    variety: 'Basmati',
-    bags: 200,
-    arrived_at: '10:20 AM',
-    status: 'done',
-    wait_minutes: 0,
-  },
-]
+const summaryTable = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: 12,
+}
+
+const thStyle = {
+  textAlign: 'left',
+  padding: '8px 10px',
+  borderBottom: '2px solid #e5e7eb',
+  color: '#374151',
+  fontWeight: 700,
+}
+
+const tdStyle = {
+  padding: '10px',
+  borderBottom: '1px solid #f3f4f6',
+  color: '#4b5563',
+}
+
+const trEvenStyle = {
+  background: '#ffffff',
+}
+
+const trOddStyle = {
+  background: '#f9fafb',
+}

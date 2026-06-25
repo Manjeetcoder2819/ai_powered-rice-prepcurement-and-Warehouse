@@ -19,4 +19,10 @@ class BatchModel(Base):
     deduction_amount = Column(Float, default=0.0)
     scanned_at       = Column(String, default="")
     status           = Column(String, default="Pending")   # "Pending", "Approved", "Rejected"
+    expected_bags    = Column(Integer, default=0)
+    detected_bags    = Column(Integer, default=0)
+    shortage         = Column(Integer, default=0)
+    excess           = Column(Integer, default=0)
+    open_leaking     = Column(Integer, default=0)
+    damage_pct       = Column(Float, default=0.0)
     created_at       = Column(DateTime(timezone=True), server_default=func.now())

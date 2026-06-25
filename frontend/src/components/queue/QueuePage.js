@@ -20,6 +20,10 @@ const DEFAULT_FORM = {
   variety: '',
   bags: '',
   email: '',
+  cultivated_area: '',
+  harvest_date: '',
+  slot_time: '',
+  notes: '',
 }
 
 /* =========================================================
@@ -119,7 +123,7 @@ export default function QueuePage() {
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (!form.variety || !Number(form.bags)) {
+      if (!form.variety || (!Number(form.bags) && !Number(form.cultivated_area))) {
         setPrediction(null)
         return
       }
@@ -127,23 +131,25 @@ export default function QueuePage() {
       try {
         const preview = await predictFarmer({
           variety: form.variety,
-          bags: Number(form.bags),
+          bags: Number(form.bags) || 0,
+          cultivated_area: parseFloat(form.cultivated_area) || 0.0,
           queue_position: waiting + 1,
         })
 
         setPrediction(preview)
       } catch {
+        const fallbackBags = Number(form.bags) || Math.round((parseFloat(form.cultivated_area) || 0) * 2000 / 50) || 1
         setPrediction({
-          wait_minutes: Math.max(1, waiting + 1) * 12 + Math.max(5, Math.round(Number(form.bags) / 18)),
+          wait_minutes: Math.max(1, waiting + 1) * 12 + Math.max(5, Math.round(fallbackBags / 18)),
           prediction: {
             risk_level: 'medium',
-            expected_damaged: Math.round(Number(form.bags) * 0.03),
-            expected_wet: Math.round(Number(form.bags) * 0.012),
+            expected_damaged: Math.round(fallbackBags * 0.03),
+            expected_wet: Math.round(fallbackBags * 0.012),
             expected_good:
-              Number(form.bags) -
-              Math.round(Number(form.bags) * 0.03) -
-              Math.round(Number(form.bags) * 0.012),
-            estimated_deduction: Math.round(Number(form.bags) * 0.03) * 140,
+              fallbackBags -
+              Math.round(fallbackBags * 0.03) -
+              Math.round(fallbackBags * 0.012),
+            estimated_deduction: Math.round(fallbackBags * 0.03) * 140,
             confidence: 0.45,
           },
         })
@@ -151,7 +157,7 @@ export default function QueuePage() {
     }, 250)
 
     return () => clearTimeout(timer)
-  }, [form.variety, form.bags, waiting])
+  }, [form.variety, form.bags, form.cultivated_area, waiting])
 
   const closeRegisterModal = () => {
     setShowModal(false)
@@ -180,7 +186,8 @@ export default function QueuePage() {
     if (
       !form.name ||
       !form.mobile ||
-      !form.bags ||
+      !form.cultivated_area ||
+      !form.harvest_date ||
       !form.variety
     ) {
       toast.error(
@@ -192,8 +199,14 @@ export default function QueuePage() {
 
     setLoading(true)
 
+    const payload = {
+      ...form,
+      cultivated_area: parseFloat(form.cultivated_area) || 0.0,
+      bags: form.bags !== '' ? parseInt(form.bags) : 0,
+    }
+
     try {
-      const farmer = await createFarmer(form)
+      const farmer = await createFarmer(payload)
 
       setFarmers((prev) => [
         farmer,
@@ -218,10 +231,17 @@ export default function QueuePage() {
           'Farmer registered, but SMS failed'
         )
       }
-    } catch {
-      toast.error(
-        'Failed to register farmer'
-      )
+    } catch (error) {
+      let errorMsg = 'Failed to register farmer'
+      if (error?.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMsg = error.response.data.detail
+        } else if (Array.isArray(error.response.data.detail)) {
+          const firstErr = error.response.data.detail[0]
+          errorMsg = `${firstErr.loc.join('.')}: ${firstErr.msg}`
+        }
+      }
+      toast.error(errorMsg)
     } finally {
       setLoading(false)
     }
@@ -623,11 +643,53 @@ export default function QueuePage() {
                 }
               />
 
+              {/* CULTIVATED AREA */}
+
+              <InputField
+                label="Cultivated Area (Acres) *"
+                type="number"
+                value={form.cultivated_area || ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    cultivated_area: e.target.value,
+                  })
+                }
+              />
+
+              {/* HARVEST DATE */}
+
+              <InputField
+                label="Harvest Date *"
+                type="date"
+                value={form.harvest_date || ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    harvest_date: e.target.value,
+                  })
+                }
+              />
+
+              {/* SLOT TIME */}
+
+              <InputField
+                label="Slot Time (Optional)"
+                type="time"
+                value={form.slot_time || ''}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    slot_time: e.target.value,
+                  })
+                }
+              />
+
               {/* VARIETY */}
 
               <div>
                 <label style={labelStyle}>
-                  Variety
+                  Variety *
                 </label>
 
                 <select
@@ -664,7 +726,7 @@ export default function QueuePage() {
               {/* BAGS */}
 
               <InputField
-                label="Bags"
+                label="Bags (Optional override)"
                 type="number"
                 value={form.bags || ''}
                 onChange={(e) =>
@@ -674,7 +736,7 @@ export default function QueuePage() {
                       parseInt(
                         e.target
                           .value
-                      ) || 0,
+                      ) || '',
                   })
                 }
               />
@@ -683,18 +745,36 @@ export default function QueuePage() {
                 <div style={predictionCard}>
                   <div style={predictionTitle}>AI Prediction Preview</div>
                   <div style={predictionGrid}>
-                    <span>Wait</span>
+                    {prediction.predicted_yield_kg !== undefined && (
+                      <>
+                        <span>Predicted Yield</span>
+                        <strong>{Math.round(prediction.predicted_yield_kg)} Kg</strong>
+                      </>
+                    )}
+                    {prediction.bags !== undefined && (
+                      <>
+                        <span>Estimated Bags</span>
+                        <strong>{prediction.bags}</strong>
+                      </>
+                    )}
+                    {prediction.recommended_vehicle && (
+                      <>
+                        <span>Rec. Vehicle</span>
+                        <strong>{prediction.recommended_vehicle}</strong>
+                      </>
+                    )}
+                    <span>Wait Time</span>
                     <strong>{prediction.wait_minutes} min</strong>
-                    <span>Risk</span>
-                    <strong>{prediction.prediction.risk_level}</strong>
+                    <span>Risk Level</span>
+                    <strong>{prediction.prediction.risk_level.toUpperCase()}</strong>
                     <span>Damaged / Wet</span>
                     <strong>
                       {prediction.prediction.expected_damaged} /{' '}
-                      {prediction.prediction.expected_wet}
+                      {prediction.prediction.expected_wet} bags
                     </strong>
-                    <span>Deduction</span>
+                    <span>Est. Deduction</span>
                     <strong>
-                      Rs {prediction.prediction.estimated_deduction.toLocaleString()}
+                      ₹{prediction.prediction.estimated_deduction.toLocaleString()}
                     </strong>
                   </div>
                 </div>
@@ -957,6 +1037,9 @@ const modalBox = {
   background: '#ffffff',
   borderRadius: 14,
   overflow: 'hidden',
+  maxHeight: '90vh',
+  display: 'flex',
+  flexDirection: 'column',
 }
 
 const modalHeader = {
@@ -974,6 +1057,8 @@ const modalContent = {
   display: 'flex',
   flexDirection: 'column',
   gap: 14,
+  overflowY: 'auto',
+  flex: 1,
 }
 
 const modalFooter = {

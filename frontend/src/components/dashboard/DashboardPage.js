@@ -11,6 +11,7 @@ import {
   sendRainAlert,
   predictFarmer,
   getStock,
+  getWeather,
 } from '@/lib/api'
 import StockPieChart from './StockPieChart'
 
@@ -520,16 +521,32 @@ export default function DashboardPage({ onNavigate }) {
   const [stock, setStock] = useState([])
   const [loading, setLoading] = useState(true)
   const [chartView, setChartView] = useState('latest')
+  const [weatherData, setWeatherData] = useState(null)
+  const [upperThreshold, setUpperThreshold] = useState(70)
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const load = useCallback(async () => {
     try {
-      const [k, a, f, b, v, s] = await Promise.all([
+      const rainRisk = localStorage.getItem('simulated_rain_risk') ? parseFloat(localStorage.getItem('simulated_rain_risk')) : 68.0;
+      const temp = localStorage.getItem('simulated_temp') ? parseFloat(localStorage.getItem('simulated_temp')) : 29.0;
+      const humidity = localStorage.getItem('simulated_humidity') ? parseFloat(localStorage.getItem('simulated_humidity')) : 74.0;
+      const wind = localStorage.getItem('simulated_wind') ? parseFloat(localStorage.getItem('simulated_wind')) : 14.0;
+      
+      const savedUpper = localStorage.getItem('upper_threshold');
+      if (savedUpper) setUpperThreshold(parseInt(savedUpper));
+
+      const [k, a, f, b, v, s, w] = await Promise.all([
         getDashboardKPIs(),
         getAlerts(),
         getFarmers(),
         getBatches(),
         getVehicles(),
         getStock().catch(() => []),
+        getWeather({ rain_risk: rainRisk, temp, humidity, wind }).catch(() => null),
       ])
 
       setKpis(k)
@@ -538,6 +555,7 @@ export default function DashboardPage({ onNavigate }) {
       setBatches(b)
       setVehicles(v)
       setStock(s || [])
+      setWeatherData(w)
     } catch (error) {
       console.error(error)
     } finally {
@@ -611,8 +629,25 @@ export default function DashboardPage({ onNavigate }) {
     ? parseFloat((12.5 + (wetBags / totalBags) * 10.0).toFixed(1))
     : 12.7
 
+  const activeRainRisk = weatherData ? weatherData.rain_risk_pct : parseFloat(isMounted ? localStorage.getItem('simulated_rain_risk') || '68' : '68');
+  const showRainBanner = isMounted && activeRainRisk >= upperThreshold;
+
   return (
     <div style={pageStyle}>
+      {/* CRITICAL RAIN ALERT BANNER */}
+      {showRainBanner && (
+        <div style={upperAlertBanner}>
+          <div style={bannerIcon}>🚨</div>
+          <div style={bannerContent}>
+            <div style={bannerTitle}>CRITICAL UPPER RAIN ALERT ACTIVE</div>
+            <div style={bannerText}>
+              Current Rain Risk: <strong>{activeRainRisk}%</strong> has crossed the Upper Threshold of {upperThreshold}%. 
+              Immediately verify all open stock yards are covered and execute emergency tarpaulin protocols.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =========================================================
           KPI ROW
       ========================================================= */}
@@ -1143,6 +1178,40 @@ function KPICard({
 /* =========================================================
    STYLES
 ========================================================= */
+
+const upperAlertBanner = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 14,
+  padding: '16px 20px',
+  borderRadius: 12,
+  border: '1px solid #fca5a5',
+  background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+  color: '#991b1b',
+  boxShadow: '0 4px 6px -1px rgba(220, 38, 38, 0.05)',
+  marginBottom: 10,
+}
+
+const bannerIcon = {
+  fontSize: 24,
+}
+
+const bannerContent = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+}
+
+const bannerTitle = {
+  fontSize: 13,
+  fontWeight: 800,
+  letterSpacing: '0.05em',
+}
+
+const bannerText = {
+  fontSize: 12,
+  lineHeight: '1.4',
+}
 
 const pageStyle = {
   display: 'flex',

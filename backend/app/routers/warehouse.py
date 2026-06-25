@@ -109,6 +109,26 @@ async def add_ledger(data: LedgerCreate, db: AsyncSession = Depends(get_db)):
             stock.qty_kg += data.qty_kg
         else:
             stock.qty_kg = max(0.0, stock.qty_kg - data.qty_kg)
+    else:
+        color_map = {
+            "Sona Masoori": "#2e7d45",
+            "IR-64": "#1976d2",
+            "Basmati": "#f5a623",
+            "HMT": "#0f6e56",
+            "IR-36": "#993c1d",
+            "Pusa Basmati": "#8b5cf6",
+            "Swarna": "#ec4899",
+            "PR 106": "#f43f5e"
+        }
+        qty = data.qty_kg if data.type == "Inflow" else 0.0
+        stock = StockModel(
+            variety=data.variety,
+            qty_kg=qty,
+            capacity_kg=1000000.0,
+            zone=data.zone,
+            color=color_map.get(data.variety, "#6b7280")
+        )
+        db.add(stock)
             
     # Fetch price to return
     price_r = await db.execute(select(VarietyPriceModel).where(VarietyPriceModel.variety == data.variety))

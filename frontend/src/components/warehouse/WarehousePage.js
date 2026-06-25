@@ -245,7 +245,7 @@ export default function WarehousePage() {
               fill="none"
               stroke="#16a34a"
               strokeWidth="12"
-              strokeDasharray={`${(usedPct / 100) * 314} 314`}
+              strokeDasharray={`${(Math.min(100, Math.max(0, usedPct)) / 100) * 314} 314`}
               strokeDashoffset="0"
               strokeLinecap="round"
               style={{
@@ -371,7 +371,7 @@ export default function WarehousePage() {
                     <div
                       style={{
                         ...progressFill,
-                        width: `${((item.qty_kg ?? item.qty_mt ?? 0) / (item.capacity_kg ?? item.capacity_mt ?? 1)) * 100}%`,
+                        width: `${Math.min(100, Math.max(0, (((item.qty_kg ?? item.qty_mt ?? 0) / (item.capacity_kg || item.capacity_mt || 1)) * 100)))}%`,
                         background: item.color,
                       }}
                     />

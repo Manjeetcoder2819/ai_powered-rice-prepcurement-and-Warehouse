@@ -103,8 +103,8 @@ export const getBatches = async () => {
   return response.data;
 };
 
-export const scanBatch = async (farmerId) => {
-  const response = await api.post(`/bags/scan/${farmerId}`);
+export const scanBatch = async (farmerId, data = null) => {
+  const response = await api.post(`/bags/scan/${farmerId}`, data);
   return response.data;
 };
 
@@ -182,6 +182,21 @@ export const cancelVehicleBooking = async (id) => {
 
 export const autoScheduleVehicles = async () => {
   const response = await api.post("/vehicles/auto-schedule");
+  return response.data;
+};
+
+export const assignVehicle = async (vehicleId, farmerId) => {
+  const response = await api.post(`/vehicles/${vehicleId}/assign/${farmerId}`);
+  return response.data;
+};
+
+export const gateVerify = async (data) => {
+  const response = await api.post("/vehicles/gate-verify", data);
+  return response.data;
+};
+
+export const resetSimulatorDB = async () => {
+  const response = await api.post("/vehicles/reset-simulator");
   return response.data;
 };
 

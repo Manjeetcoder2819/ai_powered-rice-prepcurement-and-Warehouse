@@ -3,7 +3,7 @@
 import React from "react";
 
 export default function StockPieChart({ stock = [], width = 150, height = 150, strokeWidth = 16 }) {
-  const total = stock.reduce((sum, item) => sum + (item.qty_kg || 0), 0);
+  const total = stock.reduce((sum, item) => sum + (item.qty_kg || item.qty_mt || 0), 0);
   const cx = width / 2;
   const cy = height / 2;
   // Radius of the circle containing the donut strokes
@@ -15,7 +15,7 @@ export default function StockPieChart({ stock = [], width = 150, height = 150, s
 
   if (total > 0) {
     stock.forEach(item => {
-      const qty = item.qty_kg || 0;
+      const qty = item.qty_kg || item.qty_mt || 0;
       const pct = qty / total;
       if (pct > 0) {
         const dash = pct * circ;
