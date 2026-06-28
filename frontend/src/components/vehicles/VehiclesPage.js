@@ -234,6 +234,22 @@ export default function VehiclesPage() {
     }
   };
 
+  const getCameraFeedImage = () => {
+    if (ocrConfidence === 0.55 && selectedPlate === "MH14CD9087") {
+      return "/images/test_data/blurred_plate.png";
+    }
+    if (selectedPlate === "MH14CD9087") {
+      return "/images/test_data/readable_plate.png";
+    }
+    if (selectedPlate === "MH12AB4521") {
+      return "/images/test_data/registered_vehicle.png";
+    }
+    if (selectedPlate === "MH12EF3344" || selectedPlate === "MH99ZZ9999") {
+      return "/images/test_data/unregistered_vehicle.png";
+    }
+    return "/images/test_data/registered_vehicle.png";
+  };
+
   return (
     <div style={pageStyle}>
       <style>{`
@@ -439,6 +455,22 @@ export default function VehiclesPage() {
                 "pulse-warning 2s infinite"
               ) : "none"
             }}>
+              {/* Live Camera Feed Image Background */}
+              <img
+                src={getCameraFeedImage()}
+                alt="ANPR Live Feed"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  opacity: verifyLoading ? 0.35 : 0.55,
+                  transition: "opacity 0.3s ease",
+                  zIndex: 1
+                }}
+              />
+
               {/* Scanline Animation Effect */}
               <div style={{
                 position: "absolute",
@@ -511,7 +543,8 @@ export default function VehiclesPage() {
                 alignItems: "center",
                 overflow: "hidden",
                 transform: verifyLoading ? "scale(0.96)" : "scale(1)",
-                transition: "transform 0.2s ease"
+                transition: "transform 0.2s ease",
+                zIndex: 5
               }}>
                 {/* IND blue strip on left */}
                 <div style={{

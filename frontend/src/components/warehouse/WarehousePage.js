@@ -274,6 +274,38 @@ export default function WarehousePage() {
           <div style={smallText}>Capacity Used</div>
         </div>
 
+        {/* WAREHOUSE IMAGE CARD */}
+        <div style={{
+          background: "#ffffff",
+          padding: 16,
+          borderRadius: 12,
+          border: "1px solid #e5e7eb",
+          width: 260,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          flexShrink: 0
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1f2937" }}>
+            Warehouse Layout Overview
+          </div>
+          <div style={{
+            height: 120,
+            borderRadius: 8,
+            overflow: "hidden",
+            border: "1px solid #e2e8f0"
+          }}>
+            <img
+              src="/images/test_data/warehouse.png"
+              alt="Warehouse Layout Map"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: "#4b5563", lineHeight: "1.4" }}>
+            Real-time digital mapping of storage silos and quarantine bays. Dynamic routing active.
+          </div>
+        </div>
+
         {/* ZONES */}
 
         <div style={zoneGrid}>

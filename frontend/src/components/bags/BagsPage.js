@@ -114,6 +114,22 @@ export default function BagsPage() {
     ? (isSimulating ? (damaged * 140) : batch.deduction_amount)
     : 0
 
+  const getBagFeedImage = () => {
+    if (scanning) {
+      if (scanProfile === "healthy") return "/images/test_data/healthy_bag.png";
+      if (scanProfile === "torn") return "/images/test_data/torn_bag.png";
+      if (scanProfile === "wet") return "/images/test_data/wet_bag.png";
+      if (scanProfile === "leaking") return "/images/test_data/open_bag.png";
+    }
+    if (batch) {
+      if (batch.damaged > 0) return "/images/test_data/torn_bag.png";
+      if (batch.wet > 0) return "/images/test_data/wet_bag.png";
+      if (batch.open_leaking > 0) return "/images/test_data/open_bag.png";
+      return "/images/test_data/healthy_bag.png";
+    }
+    return "/images/test_data/bag_count.png";
+  };
+
   const handleScan = async () => {
     if (!selectedFarmerId) {
       toast.error('No farmer selected or available to scan')
@@ -404,70 +420,105 @@ export default function BagsPage() {
                 <span>📹 CV CAMERA BAY 2 FEED (Bounding Boxes)</span>
                 <span>FPS: 24 · Resolution: 1080p</span>
               </div>
-              <div style={{ ...bagGrid, maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                {Array.from(
-                  { length: batch.total_bags },
-                  (_, i) => {
-                    const idx = i + 1
-                    const isScanned = !isSimulating || idx <= simulationProgress
-                    const isDmg = isScanned && batch.damaged_indices?.includes(idx)
-                    const isWet = isScanned && batch.wet_indices?.includes(idx)
-                    const isLeaking = isScanned && idx <= (batch.open_leaking || 0)
+              <div style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}>
+                {/* Visual camera crop snapshot */}
+                <div style={{
+                  width: 120,
+                  height: 120,
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  position: 'relative',
+                  border: '1px solid #334155',
+                  background: '#020617',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flexShrink: 0
+                }}>
+                  <img
+                    src={getBagFeedImage()}
+                    alt="Bag Camera Feed"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', flex: 1 }}
+                  />
+                  <div style={{
+                    background: 'rgba(15,23,42,0.95)',
+                    color: '#e2e8f0',
+                    fontSize: 8,
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    padding: '3px 0',
+                    borderTop: '1px solid #334155',
+                    textTransform: 'uppercase'
+                  }}>
+                    {scanning ? 'Scanning' : 'Sample Feed'}
+                  </div>
+                </div>
 
-                    let bg = '#334155'
-                    let border = '2px solid transparent'
-                    let label = ''
-                    let labelColor = '#ffffff'
-                    
-                    if (isScanned) {
-                      if (isDmg) {
-                        bg = 'rgba(239, 68, 68, 0.2)'
-                        border = '2px solid #ef4444'
-                        label = 'Torn'
-                        labelColor = '#ef4444'
-                      } else if (isWet) {
-                        bg = 'rgba(245, 158, 11, 0.2)'
-                        border = '2px solid #f59e0b'
-                        label = 'Wet'
-                        labelColor = '#f59e0b'
-                      } else if (isLeaking) {
-                        bg = 'rgba(234, 179, 8, 0.2)'
-                        border = '2px solid #eab308'
-                        label = 'Leak'
-                        labelColor = '#eab308'
-                      } else {
-                        bg = 'rgba(16, 185, 129, 0.15)'
-                        border = '2px solid #10b981'
-                        label = 'OK'
-                        labelColor = '#10b981'
+                {/* Bounding box grid */}
+                <div style={{ ...bagGrid, flex: 1, maxHeight: '120px', overflowY: 'auto', paddingRight: '4px', marginBottom: 0 }}>
+                  {Array.from(
+                    { length: batch.total_bags },
+                    (_, i) => {
+                      const idx = i + 1
+                      const isScanned = !isSimulating || idx <= simulationProgress
+                      const isDmg = isScanned && batch.damaged_indices?.includes(idx)
+                      const isWet = isScanned && batch.wet_indices?.includes(idx)
+                      const isLeaking = isScanned && idx <= (batch.open_leaking || 0)
+
+                      let bg = '#334155'
+                      let border = '2px solid transparent'
+                      let label = ''
+                      let labelColor = '#ffffff'
+                      
+                      if (isScanned) {
+                        if (isDmg) {
+                          bg = 'rgba(239, 68, 68, 0.2)'
+                          border = '2px solid #ef4444'
+                          label = 'Torn'
+                          labelColor = '#ef4444'
+                        } else if (isWet) {
+                          bg = 'rgba(245, 158, 11, 0.2)'
+                          border = '2px solid #f59e0b'
+                          label = 'Wet'
+                          labelColor = '#f59e0b'
+                        } else if (isLeaking) {
+                          bg = 'rgba(234, 179, 8, 0.2)'
+                          border = '2px solid #eab308'
+                          label = 'Leak'
+                          labelColor = '#eab308'
+                        } else {
+                          bg = 'rgba(16, 185, 129, 0.15)'
+                          border = '2px solid #10b981'
+                          label = 'OK'
+                          labelColor = '#10b981'
+                        }
                       }
-                    }
 
-                    return (
-                      <div
-                        key={idx}
-                        title={`Bag #${idx}: ${label}`}
-                        style={{
-                          aspectRatio: '1',
-                          borderRadius: 4,
-                          fontSize: 8,
-                          fontWeight: 800,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: bg,
-                          border: border,
-                          color: labelColor,
-                          position: 'relative'
-                        }}
-                      >
-                        <span style={{ fontSize: 7 }}>#{idx}</span>
-                        {label && <span style={{ fontSize: 6, fontWeight: 900, textTransform: 'uppercase' }}>{label}</span>}
-                      </div>
-                    )
-                  }
-                )}
+                      return (
+                        <div
+                          key={idx}
+                          title={`Bag #${idx}: ${label}`}
+                          style={{
+                            aspectRatio: '1',
+                            borderRadius: 4,
+                            fontSize: 8,
+                            fontWeight: 800,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: bg,
+                            border: border,
+                            color: labelColor,
+                            position: 'relative'
+                          }}
+                        >
+                          <span style={{ fontSize: 7 }}>#{idx}</span>
+                          {label && <span style={{ fontSize: 6, fontWeight: 900, textTransform: 'uppercase' }}>{label}</span>}
+                        </div>
+                      )
+                    }
+                  )}
+                </div>
               </div>
             </div>
           )}

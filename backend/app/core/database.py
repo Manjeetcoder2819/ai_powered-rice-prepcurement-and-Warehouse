@@ -92,8 +92,11 @@ if DB_URL.startswith("sqlite"):
         prefix = "sqlite+aiosqlite:///"
         if DB_URL.startswith(prefix):
             path_part = DB_URL[len(prefix):].lstrip(".").lstrip("/")
-            absolute_db_path = (backend_dir / path_part).resolve()
-            DB_URL = f"sqlite+aiosqlite:///{absolute_db_path}"
+# Force test database URL under testing environment
+if os.environ.get("TESTING") == "1":
+    backend_dir = Path(__file__).resolve().parents[2]
+    absolute_db_path = (backend_dir / 'rice_ams_wms' / 'database' / 'rice_ams_test.db').resolve()
+    DB_URL = f"sqlite+aiosqlite:///{absolute_db_path}"
 
 # =====================================================
 # DATABASE ENGINE
