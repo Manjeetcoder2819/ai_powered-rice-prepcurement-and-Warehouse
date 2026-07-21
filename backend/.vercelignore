@@ -1,0 +1,15 @@
+# Ignore Virtual Environments and Cache
+venv/
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+
+# Ignore Heavy Models & Runs
+runs/
+yolov8n.pt
+*.dll
+*.so
+
+# Ignore test logs
+*.log
